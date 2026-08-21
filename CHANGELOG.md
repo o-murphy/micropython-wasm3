@@ -34,13 +34,15 @@ build, `tests/`, `tools/`, `benchmarks/`).
 Against MicroPython v1.28.0 (the version CI pins) and, with identical
 results, against current `master` (v1.29.0-preview):
 
-- natmod builds and links for `x64`: text 85736 B, bss 428 B, 63 GOT
-  entries, `wasm3.mpy` 87685 B. This settles the open question about
+- natmod builds and links for `x64` (text 85736 B, bss 428 B, 63 GOT entries,
+  `wasm3.mpy` 87685 B) and for `x86`/i386 (text 103348 B, bss 216 B, 69 GOT
+  entries, 105575 B). This settles the open question about
   wasm3-as-natmod: the opcode tables in `m3_compile.c`, arrays of function
   pointers, relocate without trouble, and wasm3 needs no executable memory
   because it interprets rather than JITs.
-- usermod builds into `ports/unix` (~109 KB of added text).
-- 20/20 tests pass under both, covering calls and i32 wrapping, linear memory
+- usermod builds into `ports/unix`, 64- and 32-bit (~109 KB / ~140 KB of
+  added text).
+- 20/20 tests pass under all four combinations, covering calls and i32 wrapping, linear memory
   shared by reference in both directions, out-of-bounds traps, host imports
   called back into Python, and slot lifetime.
 - `src/math_shim.c` checked bit-exact against glibc over 60M values,
@@ -48,10 +50,12 @@ results, against current `master` (v1.29.0-preview):
 
 ### Not yet done
 
-- No target other than `x64` has been built — no cross-toolchain was
-  available. `armv6m`, `armv7m*`, `xtensa`, `xtensawin`, `rv32imc`, `rv64imc`
-  have Makefile branches but are untried.
-- CI covers x64 only; no benchmarks, no release packaging.
+- No target other than `x64` and `x86` has been built — no cross-toolchain
+  was available locally. `armv6m`, `armv7m*`, `xtensa`, `xtensawin`,
+  `rv32imc`, `rv64imc` have Makefile branches and CI legs, but no green run.
+- CI runs the suite only on x64/x86; on-target testing (QEMU armv7m,
+  rp2040py armv6m) needs a raw-REPL bridge this repo does not have.
+- No benchmarks, no release packaging.
 - `i64` marshalling goes through `mp_int_t` and will not round-trip large
   values on a 32-bit port.
 - Globals, WASI, table/reference-type APIs are not exposed.

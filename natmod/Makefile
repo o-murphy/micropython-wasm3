@@ -83,12 +83,29 @@ endif
 
 SRC = wasm3_mp.c libc_shim.c math_shim.c wasm3.py $(WASM3_SRC) $(_SQRT_SRCS)
 
-# ── Arch-specific cross-compiler prefix ───────────────────────────────────────
-ifeq ($(ARCH),xtensawin)
-CROSS = xtensa-esp32s3-elf-
-else ifeq ($(ARCH),xtensa)
-CROSS = xtensa-esp32-elf-
+# ── x86: force SSE2 ───────────────────────────────────────────────────────────
+# Two reasons, and the second one is not optional for a wasm runtime.
+#
+# 1. With the default x87 math, GCC reports __FLT_EVAL_METHOD__ == 2, so
+#    glibc's <math.h> typedefs float_t/double_t as long double. MicroPython's
+#    lib/libm_dbl/libm.h assumes method 0 and typedefs them float/double,
+#    and the two collide with a conflicting-types error.
+# 2. x87 evaluates single- and double-precision arithmetic in 80-bit extended
+#    precision and rounds on store. wasm requires IEEE-754 binary32/binary64
+#    semantics for every f32/f64 op, so excess precision is a conformance bug,
+#    not just a rounding curiosity.
+ifeq ($(ARCH),x86)
+CFLAGS_EXTRA += -msse2 -mfpmath=sse
 endif
+
+# No CROSS override here on purpose. dynruntime.mk assigns CROSS with a plain
+# `=` (py/dynruntime.mk:94,101), so anything set before the include below is
+# overwritten and anything set after it would have to be repeated for every
+# arch. Its choices are the canonical ones and CI installs to match:
+#   xtensa    -> xtensa-lx106-elf-   (ESP8266)
+#   xtensawin -> xtensa-esp32-elf-   (ESP32, from esp-idf)
+#   armv*     -> arm-none-eabi-
+#   rv*imc    -> riscv64-unknown-elf-
 
 # ── Common flags ──────────────────────────────────────────────────────────────
 # -include pulls the shared wasm3 knob set into every translation unit,

@@ -4,71 +4,239 @@ on:
   push:
     branches: ["**"]
   pull_request:
+    paths:
+      - "wasm3"
+      - "src/**"
+      - "natmod/**"
+      - "usermod/**"
+      - "tests/**"
+      - "tools/**"
+      - ".github/workflows/natmod.yml"
+      - ".github/actions/**"
   workflow_dispatch:
+    inputs:
+      mpy_tag:
+        description: "MicroPython release tag (e.g. v1.28.0)"
+        required: false
+        default: "v1.28.0"
+  workflow_call:
+    inputs:
+      mpy_tag:
+        description: "MicroPython release tag (e.g. v1.28.0)"
+        required: false
+        type: string
+        default: "v1.28.0"
 
 concurrency:
+  # Literal "natmod-" prefix rather than ${{ github.workflow }}: under
+  # workflow_call that expression resolves to the *caller's* workflow name,
+  # which can silently collide with the caller's own concurrency group.
   group: natmod-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  # Pin the MicroPython revision: mpy_ld, dynruntime.mk and the .mpy ABI all
-  # move, and a natmod is only loadable by a matching interpreter. v1.28.0 is
-  # the latest release tag -- v1.29.0 does not exist yet, only v1.29.0-preview.
-  MICROPYTHON_REF: v1.28.0
+  # A natmod is only loadable by an interpreter with a matching .mpy ABI, and
+  # mpy_ld/dynruntime.mk move between releases — so the version is pinned, not
+  # floating. v1.28.0 is the latest release tag (v1.29.0 does not exist yet,
+  # only v1.29.0-preview).
+  MPY_TAG: ${{ inputs.mpy_tag || github.event.inputs.mpy_tag || 'v1.28.0' }}
 
 jobs:
-  x64:
-    # Only x64 is wired up: it is the one target that has actually been built
-    # and tested (see README "Status"). Cross targets need their toolchains
-    # installed here first, and are expected to surface toolchain-specific
-    # link problems on the first try -- add them one at a time, not as a
-    # matrix that goes red all at once.
+  # ── Build every natmod arch ───────────────────────────────────────────────
+  # Cross toolchains come from dynruntime.mk's own CROSS choices (see the note
+  # at the top of natmod/Makefile), so the apt packages below are picked to
+  # match those exact prefixes.
+  #
+  # fail-fast is off deliberately: these legs fail for unrelated,
+  # toolchain-specific reasons, and one red arch should not hide the state of
+  # the other nine.
+  build:
+    name: build (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+          - arch: x86
+            apt: gcc-multilib
+          - arch: armv6m
+            apt: gcc-arm-none-eabi libnewlib-arm-none-eabi
+          - arch: armv7m
+            apt: gcc-arm-none-eabi libnewlib-arm-none-eabi
+          - arch: armv7emsp
+            apt: gcc-arm-none-eabi libnewlib-arm-none-eabi
+          - arch: armv7emdp
+            apt: gcc-arm-none-eabi libnewlib-arm-none-eabi
+          - arch: rv32imc
+            apt: gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+          - arch: rv64imc
+            apt: gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+          # xtensa/xtensawin have no plain apt package — they get their own
+          # steps below instead of the generic "Install cross-compiler" one.
+          - arch: xtensa
+            toolchain: xtensa-lx106
+          - arch: xtensawin
+            toolchain: esp-idf
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/fetch-micropython
+        with:
+          mpy_tag: ${{ env.MPY_TAG }}
+
+      - name: Install cross-compiler
+        if: matrix.apt != ''
+        # apt-get update first: the runner image's baked-in package index can
+        # already point at a gcc/glibc revision the mirror has superseded,
+        # which shows up as a 404 on install rather than as a version error.
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ${{ matrix.apt }}
+
+      - name: Install xtensa (ESP8266) toolchain
+        if: matrix.toolchain == 'xtensa-lx106'
+        # dynruntime.mk uses xtensa-lx106-elf- for ARCH=xtensa; same tarball
+        # MicroPython's own ci_esp8266_setup uses.
+        run: |
+          wget -q https://micropython.org/resources/xtensa-lx106-elf-standalone.tar.gz
+          tar xzf xtensa-lx106-elf-standalone.tar.gz
+          echo "$PWD/xtensa-lx106-elf/bin" >> "$GITHUB_PATH"
+
+      - name: Install esp-idf (xtensawin toolchain)
+        if: matrix.toolchain == 'esp-idf'
+        # Only for the xtensa-esp32-elf- toolchain that install.sh fetches —
+        # nothing here builds against esp-idf components, so no
+        # `git submodule update` (which is most of that clone's cost).
+        env:
+          IDF_VER: v5.4
+        run: |
+          git clone --depth 1 --branch $IDF_VER https://github.com/espressif/esp-idf.git
+          ./esp-idf/install.sh
+          source esp-idf/export.sh
+          echo "$PATH" | tr ':' '\n' | grep -i esp-idf >> "$GITHUB_PATH" || true
+
+      - name: Install Python tools
+        run: pip install pyelftools ar
+
+      - name: Build mpy-cross
+        run: make -C "$MPY_DIR/mpy-cross"
+
+      - name: Build ${{ matrix.arch }}
+        working-directory: natmod
+        # esp-idf's export.sh puts its own venv ahead of the system PATH, so
+        # the pyelftools/ar installed above are invisible to the python
+        # mpy_ld.py then runs under — reinstall inside that env.
+        run: |
+          if [ "${{ matrix.toolchain }}" = "esp-idf" ]; then
+            source ../esp-idf/export.sh
+            pip install pyelftools ar
+          fi
+          make ARCH=${{ matrix.arch }} MPY_DIR="$MPY_DIR" dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm3-${{ matrix.arch }}
+          path: natmod/build/${{ matrix.arch }}/
+          if-no-files-found: error
+
+  # ── Run the suite on the arches this runner can actually execute ──────────
+  # x64 and x86 only. Adding an on-target leg (armv7m under QEMU, armv6m under
+  # an RP2040 emulator) is the natural next step and is what micropython-bclibc
+  # does; it needs a serial/raw-REPL bridge that does not exist in this repo
+  # yet, so it is left out rather than committed untested.
+  test:
+    name: test (${{ matrix.label }})
+    needs: build
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            kind: unix
+            label: x64 / micropython
+          - arch: x86
+            kind: unix32
+            label: x86 / micropython 32-bit
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/fetch-micropython
+        with:
+          mpy_tag: ${{ env.MPY_TAG }}
+
+      - name: Install unix build deps
+        if: matrix.kind == 'unix'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y libffi-dev pkg-config
+
+      - name: Install 32-bit build deps
+        if: matrix.kind == 'unix32'
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -q
+          sudo apt-get install -y gcc-multilib libffi-dev:i386 pkg-config
+
+      - name: Build micropython unix (matches the natmod .mpy version)
+        run: |
+          make -C "$MPY_DIR/ports/unix" submodules
+          if [ "${{ matrix.kind }}" = "unix32" ]; then
+            make -C "$MPY_DIR/ports/unix" VARIANT=standard MICROPY_FORCE_32BIT=1
+          else
+            make -C "$MPY_DIR/ports/unix" VARIANT=standard
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm3-${{ matrix.arch }}
+          path: natmod/build/${{ matrix.arch }}/
+
+      - name: Check the committed wasm fixtures match their generator
+        run: |
+          python3 tools/make_test_wasm.py
+          git diff --exit-code -- tests/wasm
+
+      - name: Run tests
+        run: |
+          ln -sf ../natmod/build/${{ matrix.arch }}/wasm3.mpy tests/wasm3.mpy
+          cd tests && "$MPY_DIR/ports/unix/build-standard/micropython" test_wasm3.py
+
+  # ── The same suite against a usermod firmware ─────────────────────────────
+  # Different linkage entirely (port's own libc/libm, no mpy_ld, no PIC), so
+  # it can break independently of every natmod leg above.
+  usermod:
+    name: usermod (x64 / ports/unix)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - uses: actions/setup-python@v5
+      - uses: ./.github/actions/fetch-micropython
         with:
-          python-version: "3.11"
+          mpy_tag: ${{ env.MPY_TAG }}
 
-      - name: Install mpy_ld dependencies
-        run: pip install -U pyelftools ar
-
-      - name: Clone MicroPython
+      - name: Install unix build deps
         run: |
-          git clone --depth 1 --branch "$MICROPYTHON_REF" \
-            https://github.com/micropython/micropython /tmp/micropython
+          sudo apt-get update -q
+          sudo apt-get install -y libffi-dev pkg-config
 
-      - name: Build mpy-cross and the unix port
+      - name: Build firmware with the usermod baked in
         run: |
-          make -C /tmp/micropython/mpy-cross -j"$(nproc)"
-          make -C /tmp/micropython/ports/unix submodules
-          make -C /tmp/micropython/ports/unix -j"$(nproc)"
-
-      - name: Build natmod
-        run: make -C natmod ARCH=x64 MPY_DIR=/tmp/micropython
-
-      - name: Regenerate wasm fixtures
-        # Committed fixtures and the generator must not drift apart.
-        run: |
-          python3 tools/make_test_wasm.py
-          git diff --exit-code -- tests/wasm
-
-      - name: Run tests (natmod)
-        run: |
-          ln -sf ../natmod/wasm3_x64.mpy tests/wasm3.mpy
-          cd tests && /tmp/micropython/ports/unix/build-standard/micropython test_wasm3.py
-
-      - name: Build usermod firmware
-        run: |
-          make -C /tmp/micropython/ports/unix -j"$(nproc)" \
+          make -C "$MPY_DIR/ports/unix" submodules
+          make -C "$MPY_DIR/ports/unix" \
             BUILD=build-wasm3 PROG=micropython-wasm3 \
-            USER_C_MODULES="$PWD" \
-            FROZEN_MANIFEST="$PWD/usermod/manifest.py"
+            USER_C_MODULES="$GITHUB_WORKSPACE" \
+            FROZEN_MANIFEST="$GITHUB_WORKSPACE/usermod/manifest.py"
 
-      - name: Run tests (usermod)
-        run: |
-          rm -f tests/wasm3.mpy
-          cd tests && /tmp/micropython/ports/unix/build-wasm3/micropython-wasm3 test_wasm3.py
+      - name: Run tests
+        # No wasm3.mpy in tests/ here — it would shadow the frozen module.
+        run: cd tests && "$MPY_DIR/ports/unix/build-wasm3/micropython-wasm3" test_wasm3.py

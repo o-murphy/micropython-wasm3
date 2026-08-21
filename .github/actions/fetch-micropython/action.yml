@@ -1,0 +1,25 @@
+name: Fetch MicroPython tarball
+description: >
+  Downloads and extracts a MicroPython release tarball, then exports
+  MPY_DIR into $GITHUB_ENV for subsequent steps.
+
+inputs:
+  mpy_tag:
+    description: MicroPython release tag (e.g. v1.28.0)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Download and extract MicroPython ${{ inputs.mpy_tag }}
+      shell: bash
+      # The release tarball rather than a git clone: it already carries the
+      # bundled lib/ sources (lib/libm, lib/libm_dbl) that natmod/Makefile
+      # pulls sqrt from, with no submodule init needed.
+      run: |
+        VER="${{ inputs.mpy_tag }}"
+        VER="${VER#v}"
+        wget -q "https://github.com/micropython/micropython/releases/download/${{ inputs.mpy_tag }}/micropython-${VER}.tar.xz" \
+          -O mpy.tar.xz
+        tar xf mpy.tar.xz && rm mpy.tar.xz
+        echo "MPY_DIR=$GITHUB_WORKSPACE/micropython-${VER}" >> "$GITHUB_ENV"

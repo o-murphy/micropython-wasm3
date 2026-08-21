@@ -69,17 +69,25 @@ v1.28.0** — the version CI pins, and the latest release tag. Both build modes
 were also checked against current `master` (v1.29.0-preview) with identical
 results.
 
-| Target      | natmod | usermod | tests    |
-| ----------- | ------ | ------- | -------- |
-| x64         | ✅     | ✅      | 20/20 ✅ |
-| everything else | 🚧 | 🚧      | 🚧       |
+| Target          | natmod | usermod | tests    |
+| --------------- | ------ | ------- | -------- |
+| x64             | ✅     | ✅      | 20/20 ✅ |
+| x86 (i386)      | ✅     | ✅      | 20/20 ✅ |
+| everything else | 🚧     | 🚧      | 🚧       |
 
-No cross-toolchain was available in that session, so **`armv6m`, `armv7m*`,
-`xtensa`, `xtensawin`, `rv32imc` and `rv64imc` are untried** — the Makefile
-carries the arch branches, but nobody has run them. Expect the first
-cross-build to surface toolchain-specific link problems; `micropython-bclibc`
-hit exactly that on Xtensa (a non-empty `.data` in newlib's `libm.a`, which
-`mpy_ld` rejects) and on RISC-V (picolibc `.srodata` handling).
+No cross-toolchain was available locally, so **`armv6m`, `armv7m*`, `xtensa`,
+`xtensawin`, `rv32imc` and `rv64imc` have never been built** — the Makefile
+carries the arch branches and CI now builds all ten, but no green run exists
+yet. Expect the first cross-build to surface toolchain-specific link
+problems; `micropython-bclibc` hit exactly that on Xtensa (a non-empty
+`.data` in newlib's `libm.a`, which `mpy_ld` rejects) and on RISC-V (picolibc
+`.srodata` handling).
+
+CI (`.github/workflows/natmod.yml`) builds every arch and uploads each as an
+artifact; it runs the test suite only where the runner can execute the
+result — x64 and x86 — plus a usermod firmware leg. An on-target leg (armv7m
+under QEMU, armv6m under an RP2040 emulator, as `micropython-bclibc` does)
+needs a raw-REPL bridge this repo does not have yet.
 
 What the x64 run establishes, which was the open question:
 
@@ -91,8 +99,9 @@ What the x64 run establishes, which was the open question:
   function pointers, allocated with plain `m3_Malloc`
   (`wasm3/source/m3_code.c:36`). A `.mpy` cannot allocate RWX pages, so a
   real JIT could not be a natmod; wasm3 can.
-- **Size**, x64, `-Os`: text 85736 B, bss 428 B, `wasm3.mpy` 87685 B.
-  As a usermod the firmware grew by ~109 KB of text. **A natmod's text is
+- **Size**, `-Os`: x64 — text 85736 B, bss 428 B, `wasm3.mpy` 87685 B;
+  x86 — text 103348 B, bss 216 B, `wasm3.mpy` 105575 B. As a usermod the
+  firmware grew by ~109 KB (x64) / ~140 KB (x86) of text. **A natmod's text is
   copied into the GC heap at import time** — it does not execute from flash —
   so on a RAM-constrained part (armv6m especially) prefer `usermod/`.
 
