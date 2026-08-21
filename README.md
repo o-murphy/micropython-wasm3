@@ -78,7 +78,7 @@ results.
 | ----------- | ------ | ------- | -------- |
 | x64         | ✅     | ✅      | 20/20 ✅ |
 | x86 (i386)  | ✅     | ✅      | 20/20 ✅ |
-| armv6m      | ✅     | —       | not run  |
+| armv6m      | ✅     | —       | 20/20 ✅ (rp2040py), blobs ⚠️ |
 | armv7m      | ✅     | —       | 49/49 ✅ (QEMU) |
 | armv7emsp   | ✅     | —       | not run  |
 | armv7emdp   | ✅     | —       | not run  |
@@ -88,11 +88,34 @@ results.
 | xtensa      | ✅     | —       | not run  |
 
 Every arch builds in CI (`.github/workflows/natmod.yml`) and is uploaded as
-an artifact. Three are also executed: x64 and x86 natively on the runner, and
-**armv7m as real ARM code under QEMU** (`natmod/ci/run_qemu.py`, which pushes
-the `.mpy` and every blob over the raw REPL — the qemu port has no
-filesystem). Nothing has run on real hardware yet, and for the remaining six
-cross targets "it links" is still the whole claim.
+an artifact. Four are also executed: x64 and x86 natively on the runner,
+**armv7m under QEMU** (`natmod/ci/run_qemu.py`, which pushes the `.mpy` and
+every blob over the raw REPL — that port has no filesystem) and **armv6m on
+an emulated RP2040** (`natmod/ci/run_rp2040py.py`, which flashes them into a
+littlefs image, as on a real board). Nothing has run on physical hardware
+yet, and for the remaining five cross targets "it links" is still the whole
+claim.
+
+### armv6m is where this stops fitting
+
+The core suite passes on RP2040, blob suite does not, and both facts are
+about the part rather than the harness:
+
+- The armv6m `.mpy` is ~94 KB of text, all of which is copied into the
+  ~192 KB GC heap at import. One 64 KB linear memory fits on top of that;
+  `rust.wasm`, which grows its memory during `setup()`, does not — it raises
+  `MemoryError`. A `gc.collect()` between modules is required even to get
+  that far.
+- `assemblyscript.wasm` traps with `[trap] stack overflow` and `cpp.wasm`
+  with `maximum recursion depth exceeded`. With `M3_HAS_TAIL_CALL=0` the
+  native stack grows once per wasm call (see `src/wasm3_mp_config.h`), and
+  Cortex-M0+ frames plus RP2040's stack leave no room for the deeper call
+  graphs. `d_m3MaxNativeStack` turns that into a trap rather than a crash,
+  which is the guard working as intended.
+
+This is the concrete form of the warning further up: on a RAM-constrained
+part, build it as a `usermod` so the text executes from flash instead of
+occupying half the heap.
 
 The one arch that needed a fix beyond the toolchain was `xtensa` (ESP8266):
 its older GCC raises a false `-Wmaybe-uninitialized` inside wasm3's

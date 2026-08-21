@@ -30,6 +30,10 @@ build, `tests/`, `tools/`, `benchmarks/`).
   the test suite needs no WABT.
 - `natmod/examples/run_wiring_app.py` — runs the `wiring`-style demo blobs
   from wasm3/embedded-wasm-apps by supplying that host interface in Python.
+- `natmod/ci/run_rp2040py.py` — flashes the `.mpy` and every blob into a
+  littlefs image and runs the core suite on an emulated RP2040 (rp2040py
+  0.3.1), against a firmware built from the pinned MicroPython rather than
+  the emulator's own default download.
 - `natmod/ci/run_qemu.py` — raw-REPL bridge that runs both suites on the
   MicroPython QEMU port: the `.mpy` is served from a RAM-backed VFS and every
   blob is injected into the target's globals, since that port has no
@@ -62,10 +66,11 @@ results, against current `master` (v1.29.0-preview):
 
 ### Not yet done
 
-- All ten arches build in CI; three are executed (x64, x86, armv7m under
-  QEMU). Nothing has run on real hardware, and for the remaining six cross
-  targets "it links" is the entire claim.
-- No armv6m runtime leg yet (bclibc uses the rp2040py emulator for that).
+- All ten arches build in CI; four are executed (x64, x86, armv7m under QEMU,
+  armv6m on rp2040py). Nothing has run on physical hardware, and for the
+  remaining five cross targets "it links" is the entire claim.
+- On armv6m only the core suite passes — the blob suite exceeds the RP2040's
+  heap and native stack. See README under Status.
 - No benchmarks, no release packaging.
 - `i64` marshalling goes through `mp_int_t` and will not round-trip large
   values on a 32-bit port.

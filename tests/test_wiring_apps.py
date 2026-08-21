@@ -18,12 +18,34 @@ milliseconds then emit a fixed string.
 CoreMark is the one app that needs a real clock — see run_app().
 """
 
+import gc
 import sys
 import time
 
 import wasm3
 
-WASM_DIR = "../wasm2mpy/test/"
+try:
+    _INJECTED  # noqa: B018 — set by natmod/ci/run_qemu.py; absent on a host run
+except NameError:
+    _INJECTED = None
+
+
+def _wasm_dir():
+    # Host run: the submodule sits beside tests/. On a device the blobs are
+    # flashed to /wasm2mpy/test/ and there is no cwd to be relative to.
+    # Under _INJECTED the dict is keyed by the host spelling, so keep it.
+    if _INJECTED is not None:
+        return "../wasm2mpy/test/"
+    for cand in ("../wasm2mpy/test/", "/wasm2mpy/test/"):
+        try:
+            with open(cand + "simple.wasm", "rb"):
+                return cand
+        except OSError:
+            pass
+    return "../wasm2mpy/test/"
+
+
+WASM_DIR = _wasm_dir()
 
 # Exact stdout each app produces for setup() + two loop() calls under the
 # virtual clock. wat and virgil do not import millis, so they print no
@@ -50,12 +72,6 @@ def check(name, cond, detail=""):
     else:
         _failed += 1
         print("  FAIL %s %s" % (name, detail))
-
-
-try:
-    _INJECTED  # noqa: B018 — set by natmod/ci/run_qemu.py; absent on a host run
-except NameError:
-    _INJECTED = None
 
 
 def read(path):
@@ -143,6 +159,10 @@ print("wasm3 version:", wasm3.version())
 print("blink apps (setup + 2 loops, virtual clock):")
 
 for name in sorted(EXPECTED):
+    # Each app allocates a 64 KB linear memory. On a small-RAM target the
+    # freed pages have to be reclaimed before the next one, or the run dies
+    # partway through with MemoryError.
+    gc.collect()
     try:
         out, clock, pins = run_app(name)
     except Exception as e:  # noqa: BLE001 — which app broke is the useful part
