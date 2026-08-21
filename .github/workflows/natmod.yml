@@ -1,0 +1,73 @@
+name: natmod
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: natmod-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pin the MicroPython revision: mpy_ld, dynruntime.mk and the .mpy ABI all
+  # move, and a natmod is only loadable by a matching interpreter.
+  MICROPYTHON_REF: v1.29.0
+
+jobs:
+  x64:
+    # Only x64 is wired up: it is the one target that has actually been built
+    # and tested (see README "Status"). Cross targets need their toolchains
+    # installed here first, and are expected to surface toolchain-specific
+    # link problems on the first try -- add them one at a time, not as a
+    # matrix that goes red all at once.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install mpy_ld dependencies
+        run: pip install -U pyelftools ar
+
+      - name: Clone MicroPython
+        run: |
+          git clone --depth 1 --branch "$MICROPYTHON_REF" \
+            https://github.com/micropython/micropython /tmp/micropython
+
+      - name: Build mpy-cross and the unix port
+        run: |
+          make -C /tmp/micropython/mpy-cross -j"$(nproc)"
+          make -C /tmp/micropython/ports/unix submodules
+          make -C /tmp/micropython/ports/unix -j"$(nproc)"
+
+      - name: Build natmod
+        run: make -C natmod ARCH=x64 MPY_DIR=/tmp/micropython
+
+      - name: Regenerate wasm fixtures
+        # Committed fixtures and the generator must not drift apart.
+        run: |
+          python3 tools/make_test_wasm.py
+          git diff --exit-code -- tests/wasm
+
+      - name: Run tests (natmod)
+        run: |
+          ln -sf ../natmod/wasm3_x64.mpy tests/wasm3.mpy
+          cd tests && /tmp/micropython/ports/unix/build-standard/micropython test_wasm3.py
+
+      - name: Build usermod firmware
+        run: |
+          make -C /tmp/micropython/ports/unix -j"$(nproc)" \
+            BUILD=build-wasm3 PROG=micropython-wasm3 \
+            USER_C_MODULES="$PWD" \
+            FROZEN_MANIFEST="$PWD/usermod/manifest.py"
+
+      - name: Run tests (usermod)
+        run: |
+          rm -f tests/wasm3.mpy
+          cd tests && /tmp/micropython/ports/unix/build-wasm3/micropython-wasm3 test_wasm3.py
