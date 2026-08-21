@@ -192,3 +192,53 @@ float rintf(float x) {
     if (y == 0.0f) return (u.i >> 31) ? -0.0f : 0.0f;
     return y;
 }
+
+/* ── newlib classification helpers (Xtensa) ───────────────────────────────
+ * newlib resolves the C99 classification macros to these four helpers, which
+ * live in libm.a. A natmod cannot link the Xtensa toolchain's libm.a at all:
+ * it drags in lib_a-s_lib_ver.o, whose .data section is non-empty, and
+ * mpy_ld rejects any non-empty .data in a linked native module.
+ *
+ * wasm3 needs both. isnan() appears throughout m3_exec.h's float ops, and
+ * m3_math_utils.h:83 explicitly routes signbit() to __signbitf/__signbitd on
+ * ESP8266/ESP32. Without these the xtensa link fails with four undefined
+ * symbols (a real CI failure).
+ *
+ * The FP_* return values come from the toolchain's own <math.h> rather than
+ * being hardcoded, so they match whatever that newlib's macros compare
+ * against. Note fpclassify() itself cannot be used here — it *is* the macro
+ * that expands to these functions.
+ */
+#if defined(__XTENSA__)
+
+#include <math.h>
+
+int __fpclassifyd(double x) {
+    union { double f; uint64_t i; } u = { x };
+    uint32_t e = (uint32_t)(u.i >> 52) & 0x7ff;
+    uint64_t m = u.i & (~(uint64_t)0 >> 12);
+    if (e == 0x7ff) return m ? FP_NAN : FP_INFINITE;
+    if (e == 0)     return m ? FP_SUBNORMAL : FP_ZERO;
+    return FP_NORMAL;
+}
+
+int __fpclassifyf(float x) {
+    union { float f; uint32_t i; } u = { x };
+    uint32_t e = (u.i >> 23) & 0xff;
+    uint32_t m = u.i & 0x007fffffu;
+    if (e == 0xff) return m ? FP_NAN : FP_INFINITE;
+    if (e == 0)    return m ? FP_SUBNORMAL : FP_ZERO;
+    return FP_NORMAL;
+}
+
+int __signbitd(double x) {
+    union { double f; uint64_t i; } u = { x };
+    return (int)(u.i >> 63);
+}
+
+int __signbitf(float x) {
+    union { float f; uint32_t i; } u = { x };
+    return (int)(u.i >> 31);
+}
+
+#endif /* __XTENSA__ */

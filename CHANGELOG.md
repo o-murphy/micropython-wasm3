@@ -28,6 +28,8 @@ build, `tests/`, `tools/`, `benchmarks/`).
   `abort`, and seven libm pairs.
 - `tools/make_test_wasm.py` — hand-assembles the three `.wasm` fixtures, so
   the test suite needs no WABT.
+- `natmod/examples/run_wiring_app.py` — runs the `wiring`-style demo blobs
+  from wasm3/embedded-wasm-apps by supplying that host interface in Python.
 
 ### Verified
 
