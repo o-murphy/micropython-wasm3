@@ -185,14 +185,20 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y gcc-multilib libffi-dev:i386 pkg-config
 
-      - name: Build micropython unix (matches the natmod .mpy version)
-        run: |
-          make -C "$MPY_DIR/ports/unix" submodules
-          if [ "${{ matrix.kind }}" = "unix32" ]; then
-            make -C "$MPY_DIR/ports/unix" VARIANT=standard MICROPY_FORCE_32BIT=1
-          else
-            make -C "$MPY_DIR/ports/unix" VARIANT=standard
-          fi
+      # No `make submodules` step, here or in the usermod job below. MPY_DIR
+      # is the official release tarball, which already ships lib/mbedtls,
+      # lib/berkeley-db-1.xx and lib/micropython-lib vendored in; it has no
+      # .git, so `git submodule` against it just fails with "did not match
+      # any file(s) known to git". ports/unix/README.md says the same thing:
+      # the step "can be skipped if you didn't clone the MicroPython source
+      # from git".
+      - name: Build micropython unix/standard (matches the natmod .mpy version)
+        if: matrix.kind == 'unix'
+        run: make -C "$MPY_DIR/ports/unix" VARIANT=standard
+
+      - name: Build micropython unix/standard 32-bit
+        if: matrix.kind == 'unix32'
+        run: make -C "$MPY_DIR/ports/unix" VARIANT=standard MICROPY_FORCE_32BIT=1
 
       - uses: actions/download-artifact@v4
         with:
@@ -229,10 +235,20 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y libffi-dev pkg-config
 
+      - name: Build mpy-cross
+        # Built explicitly first, before FROZEN_MANIFEST ever appears on a
+        # command line: py/mkenv.mk has an auto-build rule for mpy-cross that
+        # resets USER_C_MODULES= for that recursive make but not
+        # FROZEN_MANIFEST=, which then leaks through MAKEFLAGS.
+        run: make -C "$MPY_DIR/mpy-cross"
+
       - name: Build firmware with the usermod baked in
+        # BUILD/PROG on the command line rather than as job env:, so they
+        # cannot leak into the mpy-cross step above (py/mkenv.mk uses
+        # BUILD ?= build, so an inherited env var would win and put
+        # mpy-cross somewhere the port then fails to find it).
         run: |
-          make -C "$MPY_DIR/ports/unix" submodules
-          make -C "$MPY_DIR/ports/unix" \
+          make -C "$MPY_DIR/ports/unix" VARIANT=standard \
             BUILD=build-wasm3 PROG=micropython-wasm3 \
             USER_C_MODULES="$GITHUB_WORKSPACE" \
             FROZEN_MANIFEST="$GITHUB_WORKSPACE/usermod/manifest.py"

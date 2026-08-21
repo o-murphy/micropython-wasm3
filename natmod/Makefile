@@ -123,6 +123,15 @@ CFLAGS_EXTRA += \
 # upstream CMake build also silences (wasm3/source/CMakeLists.txt).
 CFLAGS_EXTRA += -std=gnu99 -Wno-sign-compare -Wno-unused-function -Wno-unused-variable
 
+# -Wmaybe-uninitialized is a false positive here, and only on the older
+# xtensa-lx106 GCC (ESP8266): Compile_Ref_Null passes `type` to PushConst
+# after ReadRefType, and the `_` macro jumps to _catch on any error, so the
+# use is unreachable unless ReadRefType returned m3Err_none — in which case
+# both of its branches have assigned *o_type (m3_compile.c:2235, and the
+# ReadRefType body above it). Newer GCCs prove that; this one does not, and
+# dynruntime.mk compiles with -Werror.
+CFLAGS_EXTRA += -Wno-maybe-uninitialized
+
 # math_shim.c's rint()/rintf() rely on the default FP rounding mode and on
 # (x + 2^52) - 2^52 not being algebraically cancelled. Never build this with
 # -ffast-math; the guard is here so an -Ofast in the environment can't reach it.

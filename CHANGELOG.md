@@ -50,11 +50,11 @@ results, against current `master` (v1.29.0-preview):
 
 ### Not yet done
 
-- No target other than `x64` and `x86` has been built — no cross-toolchain
-  was available locally. `armv6m`, `armv7m*`, `xtensa`, `xtensawin`,
-  `rv32imc`, `rv64imc` have Makefile branches and CI legs, but no green run.
-- CI runs the suite only on x64/x86; on-target testing (QEMU armv7m,
-  rp2040py armv6m) needs a raw-REPL bridge this repo does not have.
+- All ten arches build in CI, but only `x64` and `x86` have ever been
+  executed — a GitHub runner can run no other. Nothing has run on real
+  hardware; for the eight cross targets "it links" is the entire claim.
+- On-target testing (QEMU armv7m, rp2040py armv6m) needs a raw-REPL bridge
+  this repo does not have.
 - No benchmarks, no release packaging.
 - `i64` marshalling goes through `mp_int_t` and will not round-trip large
   values on a 32-bit port.

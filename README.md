@@ -69,25 +69,33 @@ v1.28.0** — the version CI pins, and the latest release tag. Both build modes
 were also checked against current `master` (v1.29.0-preview) with identical
 results.
 
-| Target          | natmod | usermod | tests    |
-| --------------- | ------ | ------- | -------- |
-| x64             | ✅     | ✅      | 20/20 ✅ |
-| x86 (i386)      | ✅     | ✅      | 20/20 ✅ |
-| everything else | 🚧     | 🚧      | 🚧       |
+| Target      | natmod | usermod | tests    |
+| ----------- | ------ | ------- | -------- |
+| x64         | ✅     | ✅      | 20/20 ✅ |
+| x86 (i386)  | ✅     | ✅      | 20/20 ✅ |
+| armv6m      | ✅     | —       | not run  |
+| armv7m      | ✅     | —       | not run  |
+| armv7emsp   | ✅     | —       | not run  |
+| armv7emdp   | ✅     | —       | not run  |
+| rv32imc     | ✅     | —       | not run  |
+| rv64imc     | ✅     | —       | not run  |
+| xtensawin   | ✅     | —       | not run  |
+| xtensa      | ✅     | —       | not run  |
 
-No cross-toolchain was available locally, so **`armv6m`, `armv7m*`, `xtensa`,
-`xtensawin`, `rv32imc` and `rv64imc` have never been built** — the Makefile
-carries the arch branches and CI now builds all ten, but no green run exists
-yet. Expect the first cross-build to surface toolchain-specific link
-problems; `micropython-bclibc` hit exactly that on Xtensa (a non-empty
-`.data` in newlib's `libm.a`, which `mpy_ld` rejects) and on RISC-V (picolibc
-`.srodata` handling).
+Every arch builds in CI (`.github/workflows/natmod.yml`) and is uploaded as
+an artifact. **Only x64 and x86 have ever been executed** — those are the
+only two a GitHub runner can run natively. Nothing has been on real hardware,
+so "builds" is the whole claim for the eight cross targets: an `.mpy` that
+links is not an `.mpy` that runs.
 
-CI (`.github/workflows/natmod.yml`) builds every arch and uploads each as an
-artifact; it runs the test suite only where the runner can execute the
-result — x64 and x86 — plus a usermod firmware leg. An on-target leg (armv7m
-under QEMU, armv6m under an RP2040 emulator, as `micropython-bclibc` does)
-needs a raw-REPL bridge this repo does not have yet.
+An on-target leg (armv7m under QEMU, armv6m under an RP2040 emulator, as
+`micropython-bclibc` does) needs a raw-REPL bridge this repo does not have
+yet, and is the obvious next step.
+
+The one arch that needed a fix beyond the toolchain was `xtensa` (ESP8266):
+its older GCC raises a false `-Wmaybe-uninitialized` inside wasm3's
+`Compile_Ref_Null`, which `-Werror` turns fatal — see the note in
+`natmod/Makefile`.
 
 What the x64 run establishes, which was the open question:
 
