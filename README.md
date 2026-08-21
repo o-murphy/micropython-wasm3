@@ -125,10 +125,23 @@ import, which is half the budget before any wasm runs — and it does show up
 between modules fixes that part. But on a fresh heap the same blobs fail on
 stack, so more RAM alone would not buy much here.
 
-Two things that would: building as a `usermod`, so the text executes from
-flash rather than occupying half the heap; and a toolchain with working
-`musttail`, which would let `M3_HAS_TAIL_CALL=1` flatten the dispatch chain
-back out.
+Nor is the stack something the firmware can simply be given more of. On
+RP2040 it lives in `SCRATCH_Y`, a dedicated 8 KB SRAM bank, not in the region
+the heap comes from — so trimming modules or shrinking the heap buys the
+stack nothing. Raising `PICO_STACK_SIZE` past that bank just fails to link:
+
+    ld: section `.stack_dummy' will not fit in region `SCRATCH_Y'
+    ld: region `SCRATCH_Y' overflowed by 24576 bytes
+
+(that is 0x8000 requested against an 8 KB bank). Moving the stack into main
+SRAM would need a custom pico-sdk linker script.
+
+What would actually help, in order of effort: build it as a `usermod`, so the
+text executes from flash instead of occupying half the heap; or a toolchain
+with working `musttail` — GCC gained it in 15, and arm-none-eabi 13 has no
+such attribute, so `M3_HAS_TAIL_CALL=1` currently changes nothing there.
+Either way the deep-call-graph blobs need the dispatch chain flattened, not
+more memory.
 
 The one arch that needed a fix beyond the toolchain was `xtensa` (ESP8266):
 its older GCC raises a false `-Wmaybe-uninitialized` inside wasm3's
