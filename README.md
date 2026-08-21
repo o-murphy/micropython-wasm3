@@ -212,6 +212,48 @@ needs no WABT install. (`add.wasm` comes out byte-identical to
 
 ---
 
+## Running the wasm3 / wasm2mpy demo apps
+
+`natmod/examples/run_wiring_app.py` runs the blobs from
+[embedded-wasm-apps](https://github.com/wasm3/embedded-wasm-apps) — the same
+ones in [wasm2mpy](https://github.com/vshymanskyy/wasm2mpy)'s `test/`
+directory. They export `setup()`/`loop()` and import a small host interface
+called `wiring`; wasm2mpy supplies that in C, compiled into each `.mpy`, and
+this example supplies it in ordinary Python via `wasm3.link()`.
+
+```sh
+cp natmod/build/x64/wasm3.mpy natmod/examples/run_wiring_app.py .
+cp /path/to/wasm2mpy/test/*.wasm .
+micropython run_wiring_app.py zig.wasm
+```
+
+```
+== zig.wasm (1208 bytes) ==
+⚡ Zig is running!
+0 Blink
+1000 Blink
+-- ok, 2000 ms --
+```
+
+All seven blink apps run unmodified — WAT, Zig, C++, Virgil, AssemblyScript,
+Rust, TinyGo — with no rebuild between them, which is the whole difference
+from the AOT approach. CoreMark runs too:
+
+```sh
+micropython run_wiring_app.py coremark.wasm --stack 16384 --loops 1
+# Result: 1908.640
+```
+
+Two things that example had to get right, both worth copying:
+
+- **`memory.grow` invalidates `m.memory`.** `rust.wasm` grows linear memory
+  during `setup()` to seed its allocator, so a `bytearray` bound once at
+  startup goes short mid-run. The example re-fetches whenever `m.mem_size`
+  moves.
+- **TinyGo needs `_initialize()`** called before `setup()`.
+
+---
+
 ## Module API
 
 ```py
