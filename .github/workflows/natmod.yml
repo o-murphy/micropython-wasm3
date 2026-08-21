@@ -272,11 +272,11 @@ jobs:
   # QEMU has no board that can load an armv6m natmod, so this uses the
   # rp2040py emulator instead — same approach micropython-bclibc takes.
   #
-  # Core suite only. test_wiring_apps.py does not pass on this target and that
-  # is a property of the part, not of the harness: the armv6m .mpy is ~94 KB
-  # of the RP2040's ~192 KB heap, so the larger blobs run out of memory once a
-  # 64 KB linear memory is added, and with M3_HAS_TAIL_CALL=0 the deeper ones
-  # exhaust the native stack (see README under Status).
+  # Core suite only. test_wiring_apps.py does not pass on this target, and the
+  # reason is native stack depth rather than RAM: measured solo, each blob
+  # loads with 40-65 KB of heap still free and then fails on call depth,
+  # because M3_HAS_TAIL_CALL=0 costs a native frame per wasm call. See README
+  # under Status for the numbers.
   test-armv6m:
     name: test (armv6m / rp2040py)
     needs: build

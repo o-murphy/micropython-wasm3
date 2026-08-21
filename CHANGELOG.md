@@ -69,8 +69,9 @@ results, against current `master` (v1.29.0-preview):
 - All ten arches build in CI; four are executed (x64, x86, armv7m under QEMU,
   armv6m on rp2040py). Nothing has run on physical hardware, and for the
   remaining five cross targets "it links" is the entire claim.
-- On armv6m only the core suite passes — the blob suite exceeds the RP2040's
-  heap and native stack. See README under Status.
+- On armv6m only the core suite passes. The blob suite is blocked by native
+  stack depth, not by RAM — each blob loads with 40–65 KB of heap to spare
+  and then fails on call depth. See README under Status.
 - No benchmarks, no release packaging.
 - `i64` marshalling goes through `mp_int_t` and will not round-trip large
   values on a 32-bit port.

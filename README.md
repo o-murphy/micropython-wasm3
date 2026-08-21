@@ -96,26 +96,39 @@ littlefs image, as on a real board). Nothing has run on physical hardware
 yet, and for the remaining five cross targets "it links" is still the whole
 claim.
 
-### armv6m is where this stops fitting
+### armv6m runs out of native stack, not RAM
 
-The core suite passes on RP2040, blob suite does not, and both facts are
-about the part rather than the harness:
+The core suite passes on RP2040; the blob suite does not. Running each
+failing blob on its own, on a freshly collected heap, separates the two
+causes — and the binding one is not memory:
 
-- The armv6m `.mpy` is ~94 KB of text, all of which is copied into the
-  ~192 KB GC heap at import. One 64 KB linear memory fits on top of that;
-  `rust.wasm`, which grows its memory during `setup()`, does not — it raises
-  `MemoryError`. A `gc.collect()` between modules is required even to get
-  that far.
-- `assemblyscript.wasm` traps with `[trap] stack overflow` and `cpp.wasm`
-  with `maximum recursion depth exceeded`. With `M3_HAS_TAIL_CALL=0` the
-  native stack grows once per wasm call (see `src/wasm3_mp_config.h`), and
-  Cortex-M0+ frames plus RP2040's stack leave no room for the deeper call
-  graphs. `d_m3MaxNativeStack` turns that into a trap rather than a crash,
-  which is the guard working as intended.
+| blob             | free before | free after load | result                            |
+| ---------------- | ----------- | --------------- | --------------------------------- |
+| `zig`            | 140080      | 64560           | ✅ runs                            |
+| `cpp`            | 140416      | 65552           | ⛔ maximum recursion depth exceeded |
+| `assemblyscript` | 137248      | 56624           | ⛔ `[trap] stack overflow`          |
+| `rust`           | 129024      | 40944           | ⛔ `[trap] stack overflow`          |
 
-This is the concrete form of the warning further up: on a RAM-constrained
-part, build it as a `usermod` so the text executes from flash instead of
-occupying half the heap.
+Every one of them loads, allocates its 64 KB linear memory, and still leaves
+40–65 KB of heap. What kills three of the four is **call depth**: with
+`M3_HAS_TAIL_CALL=0` the native stack grows once per wasm call (see
+`src/wasm3_mp_config.h` for why it is off), and Cortex-M0+ frames on
+RP2040's few-KB stack cannot absorb the deeper call graphs.
+`d_m3MaxNativeStack` turns that into a trap instead of a crash; `cpp.wasm`
+trips MicroPython's own C-stack guard first, which is independent
+confirmation that the stack really is being consumed.
+
+RAM is genuinely tight — the ~94 KB `.mpy` is copied into the ~192 KB heap at
+import, which is half the budget before any wasm runs — and it does show up
+*second-order*: run the seven blobs back-to-back and fragmentation turns
+`rust`'s and `zig`'s failures into `MemoryError` instead. A `gc.collect()`
+between modules fixes that part. But on a fresh heap the same blobs fail on
+stack, so more RAM alone would not buy much here.
+
+Two things that would: building as a `usermod`, so the text executes from
+flash rather than occupying half the heap; and a toolchain with working
+`musttail`, which would let `M3_HAS_TAIL_CALL=1` flatten the dispatch chain
+back out.
 
 The one arch that needed a fix beyond the toolchain was `xtensa` (ESP8266):
 its older GCC raises a false `-Wmaybe-uninitialized` inside wasm3's
