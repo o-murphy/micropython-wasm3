@@ -73,8 +73,12 @@ results, against current `master` (v1.29.0-preview):
   stack depth, not by RAM — each blob loads with 40–65 KB of heap to spare
   and then fails on call depth. Relocating the stack into the heap's region
   (as MicroPython's RP2350 script already does) plus a matching
-  `d_m3MaxNativeStack` takes it from 17/20 to 25/26; only `rust.wasm` then
-  remains, and it is short of heap by ~15 KB. See README under Status.
+  `d_m3MaxNativeStack` takes it from 17/20 to 25/26, but that needs a patched
+  firmware and is recorded as a measurement, not a recommendation. From
+  inside a `.mpy` there is no fix: `-O2`, `-foptimize-sibling-calls` and
+  `M3_HAS_TAIL_CALL=1` all change nothing, and a heap-allocated interpreter
+  stack is unreachable because natmods cannot retarget MicroPython's stack
+  extents or GC root scanning. Accepted as a limit of the part. See README.
 - No benchmarks, no release packaging.
 - `i64` marshalling goes through `mp_int_t` and will not round-trip large
   values on a 32-bit port.

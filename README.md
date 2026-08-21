@@ -125,45 +125,45 @@ import, which is half the budget before any wasm runs — and it does show up
 between modules fixes that part. But on a fresh heap the same blobs fail on
 stack, so more RAM alone would not buy much here.
 
-The stack cannot simply be enlarged in place: on RP2040 it lives in
-`SCRATCH_Y`, a 4 KB scratch bank, and raising `PICO_STACK_SIZE` past it just
-fails to link (`region 'SCRATCH_Y' overflowed by 24576 bytes` for 0x8000).
+**This is accepted, not a work in progress.** On stock RP2040 firmware there
+is no fix available from inside a `.mpy`, and shipping a patched MicroPython
+would defeat the point of a natmod — a natmod is supposed to drop onto the
+firmware people already have. What was tried:
 
-It *can* be moved into the heap's own region, though — MicroPython already
-does exactly that on RP2350, and the two lines port cleanly to
-`ports/rp2/memmap_mp_rp2040.ld`, since `RAM`, `SCRATCH_X` and `SCRATCH_Y` are
-contiguous on this part:
+| attempt                                      | result                          |
+| -------------------------------------------- | ------------------------------- |
+| `-O2` instead of `-Os`                        | 17/20, +17 KB of text            |
+| explicit `-foptimize-sibling-calls`           | 17/20, byte-identical output — already on |
+| `M3_HAS_TAIL_CALL=1`                          | no effect: `musttail` needs GCC 15, arm-none-eabi is 13 |
+| running the interpreter on a heap stack       | not possible from a `.mpy` (below) |
+| `PICO_STACK_SIZE` past `SCRATCH_Y`            | fails to link, 4 KB bank         |
 
-```ld
-__GcHeapEnd  = ORIGIN(RAM) + LENGTH(RAM) - __micropy_extra_stack__;
-__StackBottom = __GcHeapEnd;
-```
+GCC does not sibling-call wasm3's indirect dispatch under the natmod PIC
+model on Thumb, and no optimisation flag changes that — the identical text
+size on the third row is the proof that the flag was already in effect.
 
-with `-Wl,--defsym=__micropy_extra_stack__=N` at link time. Measured with a
-patched firmware and a matching `-Dd_m3MaxNativeStack`:
+Switching the interpreter onto a heap-allocated stack is the one idea that
+would work in principle and is out of reach in practice: `dynruntime.h` and
+`mp_fun_table` expose nothing for it. `gc_collect()` derives its scan length
+from `MP_STATE_THREAD(stack_top)` (`gchelper_generic.c:219`) and
+`mp_cstack_check()` its depth from the same extents; a natmod cannot retarget
+either, so moving the stack would corrupt root scanning and break the
+recursion guard for any Python callback.
 
-| extra stack | `d_m3MaxNativeStack` | blob suite                       |
-| ----------- | -------------------- | -------------------------------- |
-| 0 (stock)   | 8 KB                 | 17/20 — cpp, assemblyscript, rust fail |
-| 16 KB       | 16 KB                | 25/26 — only rust fails           |
-| 32 KB       | 24 KB                | 25/26 — only rust fails           |
+For the record, a patched firmware *does* fix most of it — MicroPython's
+RP2350 script already relocates the stack into the GC heap's region, and the
+two lines port to `memmap_mp_rp2040.ld` — taking the blob suite to 25/26 with
+`d_m3MaxNativeStack` raised to match. Only `rust.wasm` still fails, ~15 KB
+short of heap. That is documented here as a measurement, not a recommendation.
 
-So six of the seven blobs are a tuning problem, not a wall — and note that
-`d_m3MaxNativeStack` has to be raised alongside, or wasm3's own guard becomes
-the limit once the real stack is no longer it.
+### What that means in practice
 
-`rust.wasm` is the exception, and it is genuinely out of room rather than
-mistuned. With 24 KB moved to the stack it gets further than before —
-`setup()` now completes and prints its banner — then dies inside `loop()`:
-
-    free_before   105296
-    loaded        free 17248   mem_size 65536
-    after setup   free 16400
-    -> MemoryError free 976
-
-It wants roughly another 15 KB, from a heap that just gave 24 KB to the
-stack. Both needs come out of the same 264 KB, and the ~94 KB `.mpy` resident
-in it is what makes them irreconcilable.
+RP2040 runs this module; it runs it with a ceiling on how deep a wasm call
+graph and how large a module can be. Four of the seven demo blobs — WAT,
+Virgil, Zig, TinyGo — work fine, as does the whole core suite. Anything with
+the call depth of AssemblyScript's or C++'s output, or the footprint of
+Rust's, needs a part with a bigger stack: armv7m clears all of it (49/49
+under QEMU).
 
 What would actually help, in order of effort: build it as a `usermod`, so the
 text executes from flash instead of occupying half the heap; or a toolchain
