@@ -125,16 +125,45 @@ import, which is half the budget before any wasm runs — and it does show up
 between modules fixes that part. But on a fresh heap the same blobs fail on
 stack, so more RAM alone would not buy much here.
 
-Nor is the stack something the firmware can simply be given more of. On
-RP2040 it lives in `SCRATCH_Y`, a dedicated 8 KB SRAM bank, not in the region
-the heap comes from — so trimming modules or shrinking the heap buys the
-stack nothing. Raising `PICO_STACK_SIZE` past that bank just fails to link:
+The stack cannot simply be enlarged in place: on RP2040 it lives in
+`SCRATCH_Y`, a 4 KB scratch bank, and raising `PICO_STACK_SIZE` past it just
+fails to link (`region 'SCRATCH_Y' overflowed by 24576 bytes` for 0x8000).
 
-    ld: section `.stack_dummy' will not fit in region `SCRATCH_Y'
-    ld: region `SCRATCH_Y' overflowed by 24576 bytes
+It *can* be moved into the heap's own region, though — MicroPython already
+does exactly that on RP2350, and the two lines port cleanly to
+`ports/rp2/memmap_mp_rp2040.ld`, since `RAM`, `SCRATCH_X` and `SCRATCH_Y` are
+contiguous on this part:
 
-(that is 0x8000 requested against an 8 KB bank). Moving the stack into main
-SRAM would need a custom pico-sdk linker script.
+```ld
+__GcHeapEnd  = ORIGIN(RAM) + LENGTH(RAM) - __micropy_extra_stack__;
+__StackBottom = __GcHeapEnd;
+```
+
+with `-Wl,--defsym=__micropy_extra_stack__=N` at link time. Measured with a
+patched firmware and a matching `-Dd_m3MaxNativeStack`:
+
+| extra stack | `d_m3MaxNativeStack` | blob suite                       |
+| ----------- | -------------------- | -------------------------------- |
+| 0 (stock)   | 8 KB                 | 17/20 — cpp, assemblyscript, rust fail |
+| 16 KB       | 16 KB                | 25/26 — only rust fails           |
+| 32 KB       | 24 KB                | 25/26 — only rust fails           |
+
+So six of the seven blobs are a tuning problem, not a wall — and note that
+`d_m3MaxNativeStack` has to be raised alongside, or wasm3's own guard becomes
+the limit once the real stack is no longer it.
+
+`rust.wasm` is the exception, and it is genuinely out of room rather than
+mistuned. With 24 KB moved to the stack it gets further than before —
+`setup()` now completes and prints its banner — then dies inside `loop()`:
+
+    free_before   105296
+    loaded        free 17248   mem_size 65536
+    after setup   free 16400
+    -> MemoryError free 976
+
+It wants roughly another 15 KB, from a heap that just gave 24 KB to the
+stack. Both needs come out of the same 264 KB, and the ~94 KB `.mpy` resident
+in it is what makes them irreconcilable.
 
 What would actually help, in order of effort: build it as a `usermod`, so the
 text executes from flash instead of occupying half the heap; or a toolchain

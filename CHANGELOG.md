@@ -71,7 +71,10 @@ results, against current `master` (v1.29.0-preview):
   remaining five cross targets "it links" is the entire claim.
 - On armv6m only the core suite passes. The blob suite is blocked by native
   stack depth, not by RAM — each blob loads with 40–65 KB of heap to spare
-  and then fails on call depth. See README under Status.
+  and then fails on call depth. Relocating the stack into the heap's region
+  (as MicroPython's RP2350 script already does) plus a matching
+  `d_m3MaxNativeStack` takes it from 17/20 to 25/26; only `rust.wasm` then
+  remains, and it is short of heap by ~15 KB. See README under Status.
 - No benchmarks, no release packaging.
 - `i64` marshalling goes through `mp_int_t` and will not round-trip large
   values on a 32-bit port.
