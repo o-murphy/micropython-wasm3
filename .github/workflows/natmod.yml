@@ -215,6 +215,13 @@ jobs:
           ln -sf ../natmod/build/${{ matrix.arch }}/wasm3.mpy tests/wasm3.mpy
           cd tests && "$MPY_DIR/ports/unix/build-standard/micropython" test_wasm3.py
 
+      - name: Run tests against the wasm2mpy demo blobs
+        # Real toolchain output — seven languages plus CoreMark — from the
+        # wasm2mpy submodule, rather than the hand-assembled fixtures.
+        # --slow adds CoreMark (~20s), which is the only blob here that
+        # exercises the interpreter under sustained load.
+        run: cd tests && "$MPY_DIR/ports/unix/build-standard/micropython" test_wiring_apps.py --slow
+
   # ── The same suite against a usermod firmware ─────────────────────────────
   # Different linkage entirely (port's own libc/libm, no mpy_ld, no PIC), so
   # it can break independently of every natmod leg above.
@@ -255,4 +262,7 @@ jobs:
 
       - name: Run tests
         # No wasm3.mpy in tests/ here — it would shadow the frozen module.
-        run: cd tests && "$MPY_DIR/ports/unix/build-wasm3/micropython-wasm3" test_wasm3.py
+        run: |
+          cd tests
+          "$MPY_DIR/ports/unix/build-wasm3/micropython-wasm3" test_wasm3.py
+          "$MPY_DIR/ports/unix/build-wasm3/micropython-wasm3" test_wiring_apps.py --slow

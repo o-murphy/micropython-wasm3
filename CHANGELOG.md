@@ -30,6 +30,12 @@ build, `tests/`, `tools/`, `benchmarks/`).
   the test suite needs no WABT.
 - `natmod/examples/run_wiring_app.py` — runs the `wiring`-style demo blobs
   from wasm3/embedded-wasm-apps by supplying that host interface in Python.
+- `wasm2mpy/` submodule (208 KB) purely for its `test/*.wasm` blobs, and
+  `tests/test_wiring_apps.py` — 29 checks over real toolchain output from
+  seven languages, asserting each app's exact stdout, its elapsed-time
+  accounting and its pin toggles, plus CoreMark behind `--slow`. Also
+  cross-checks that `tools/make_test_wasm.py` reproduces `simple.wasm`
+  byte-for-byte.
 
 ### Verified
 

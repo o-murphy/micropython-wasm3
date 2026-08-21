@@ -50,8 +50,12 @@ better answer anyway.
 │   ├── micropython.cmake       # CMake ports (rp2 / esp32 / pico-sdk)
 │   └── manifest.py             # Freezes wasm3.py into the firmware
 │
+├── wasm2mpy/                   # git submodule -> o-murphy/wasm2mpy
+│                               # (only for its test/*.wasm demo blobs)
+│
 ├── tests/
-│   ├── test_wasm3.py           # Test suite (natmod and usermod)
+│   ├── test_wasm3.py           # Core suite, hand-assembled fixtures
+│   ├── test_wiring_apps.py     # Real blobs from the wasm2mpy submodule
 │   └── wasm/                   # Generated .wasm fixtures
 │
 ├── tools/
@@ -198,9 +202,20 @@ idf.py build -DUSER_C_MODULES=/abs/path/to/usermod/micropython.cmake
 ```sh
 python3 tools/make_test_wasm.py            # regenerate tests/wasm/*.wasm
 cd natmod && make ARCH=x64 MPY_DIR=... && cd ..
-ln -sf ../natmod/wasm3_x64.mpy tests/wasm3.mpy
-cd tests && /path/to/micropython test_wasm3.py
+ln -sf ../natmod/build/x64/wasm3.mpy tests/wasm3.mpy
+cd tests
+/path/to/micropython test_wasm3.py              # 20 checks, own fixtures
+/path/to/micropython test_wiring_apps.py        # 29 checks, real blobs
+/path/to/micropython test_wiring_apps.py --slow # + CoreMark (~20s)
 ```
+
+`test_wiring_apps.py` runs the demo blobs out of the `wasm2mpy/` submodule —
+the same program compiled from seven languages, plus CoreMark. It supplies
+`wiring` in Python and gives `delay`/`millis` a *virtual* clock, so the apps
+that print elapsed milliseconds emit a fixed string and every run is
+byte-for-byte reproducible. CoreMark is the exception: it reads `millis()` to
+decide how long to iterate, so a clock that never advances leaves it spinning
+forever — it gets a real one.
 
 The same file runs against a usermod firmware — remove `tests/wasm3.mpy`
 first so the frozen module is not shadowed by the `.mpy` in the cwd.
