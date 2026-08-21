@@ -292,10 +292,16 @@ jobs:
           mpy_tag: ${{ env.MPY_TAG }}
 
       - name: Install the ARM toolchain and emulator
+        # libstdc++-arm-none-eabi-newlib is not optional here even though
+        # nothing in this repo is C++: pico-sdk compiles one .cpp of its own
+        # (pico_cxx_options/new_delete.cpp), which fails with "fatal error:
+        # cstdlib: No such file or directory" on a runner that has only
+        # gcc-arm-none-eabi.
         run: |
           sudo apt-get update -q
           sudo apt-get install -y --no-install-recommends \
-            gcc-arm-none-eabi libnewlib-arm-none-eabi cmake
+            gcc-arm-none-eabi libnewlib-arm-none-eabi \
+            libstdc++-arm-none-eabi-newlib cmake
           pip install "rp2040py==0.3.1" littlefs-python
 
       - name: Build mpy-cross
