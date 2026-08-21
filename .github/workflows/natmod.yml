@@ -12,8 +12,9 @@ concurrency:
 
 env:
   # Pin the MicroPython revision: mpy_ld, dynruntime.mk and the .mpy ABI all
-  # move, and a natmod is only loadable by a matching interpreter.
-  MICROPYTHON_REF: v1.29.0
+  # move, and a natmod is only loadable by a matching interpreter. v1.28.0 is
+  # the latest release tag -- v1.29.0 does not exist yet, only v1.29.0-preview.
+  MICROPYTHON_REF: v1.28.0
 
 jobs:
   x64:

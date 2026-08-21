@@ -64,8 +64,10 @@ better answer anyway.
 
 ## Status
 
-Everything below was built and run in one Linux x86-64 session against
-MicroPython v1.29 (`ports/unix`, `mpy-cross` from the same tree).
+Everything below was built and run on Linux x86-64 against **MicroPython
+v1.28.0** — the version CI pins, and the latest release tag. Both build modes
+were also checked against current `master` (v1.29.0-preview) with identical
+results.
 
 | Target      | natmod | usermod | tests    |
 | ----------- | ------ | ------- | -------- |
@@ -89,8 +91,8 @@ What the x64 run establishes, which was the open question:
   function pointers, allocated with plain `m3_Malloc`
   (`wasm3/source/m3_code.c:36`). A `.mpy` cannot allocate RWX pages, so a
   real JIT could not be a natmod; wasm3 can.
-- **Size**, x64, `-Os`: text 85736 B, bss 428 B, `wasm3_x64.mpy` 87667 B.
-  As a usermod the firmware grew by ~108 KB of text. **A natmod's text is
+- **Size**, x64, `-Os`: text 85736 B, bss 428 B, `wasm3.mpy` 87685 B.
+  As a usermod the firmware grew by ~109 KB of text. **A natmod's text is
   copied into the GC heap at import time** — it does not execute from flash —
   so on a RAM-constrained part (armv6m especially) prefer `usermod/`.
 
@@ -122,7 +124,9 @@ git submodule update --init --recursive
 Plus a MicroPython checkout, and a matching `mpy-cross`:
 
 ```sh
-git clone --depth 1 https://github.com/micropython/micropython
+# Match the version CI pins -- a natmod is only loadable by an interpreter
+# with the same .mpy ABI.
+git clone --depth 1 --branch v1.28.0 https://github.com/micropython/micropython
 make -C micropython/mpy-cross
 export MPY_DIR=$PWD/micropython
 ```

@@ -11,7 +11,7 @@
 #   make ARCH=rv32imc          → ESP32-C3 / ESP32-C6 (RISC-V 32)
 #   make ARCH=rv64imc          → RISC-V 64
 #
-# No aarch64: dynruntime.mk (as of MicroPython v1.29) has no ARCH=aarch64
+# No aarch64: dynruntime.mk (as of MicroPython v1.28) has no ARCH=aarch64
 # branch, so natmod cannot target it at all. Use ../usermod there.
 #
 # ── Size warning ──────────────────────────────────────────────────────────────
