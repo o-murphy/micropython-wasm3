@@ -222,6 +222,52 @@ jobs:
         # exercises the interpreter under sustained load.
         run: cd tests && "$MPY_DIR/ports/unix/build-standard/micropython" test_wiring_apps.py --slow
 
+  # ── On-target: armv7m under QEMU (Cortex-M3) ─────────────────────────────
+  # The first leg that runs the module as something other than x86. natmod/ci/
+  # run_qemu.py pushes wasm3.mpy and every .wasm blob over the raw REPL, since
+  # the qemu port has no filesystem.
+  test-armv7m:
+    name: test (armv7m / QEMU Cortex-M3)
+    needs: build
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/fetch-micropython
+        with:
+          mpy_tag: ${{ env.MPY_TAG }}
+
+      - name: Install QEMU and the ARM toolchain
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            gcc-arm-none-eabi libnewlib-arm-none-eabi qemu-system-arm
+          pip install pyelftools ar pyserial
+
+      - name: Build mpy-cross
+        run: make -C "$MPY_DIR/mpy-cross"
+
+      - name: Build QEMU firmware (MPS2_AN385)
+        # MICROPY_HEAP_SIZE well above the port's 143360 default: a natmod's
+        # text is copied into the GC heap at import, and the armv7m wasm3.mpy
+        # is ~82 KB before a single 64 KB wasm page is allocated on top. The
+        # port's linker gives RAM 2 MB, so 1 MB is comfortably inside it.
+        run: make -C "$MPY_DIR/ports/qemu" BOARD=MPS2_AN385 MICROPY_HEAP_SIZE=1048576
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm3-armv7m
+          path: natmod/build/armv7m/
+
+      - name: Run both suites under QEMU
+        run: |
+          python3 natmod/ci/run_qemu.py \
+            "$MPY_DIR/ports/qemu/build-MPS2_AN385/firmware.elf" \
+            natmod/build/armv7m
+
   # ── The same suite against a usermod firmware ─────────────────────────────
   # Different linkage entirely (port's own libc/libm, no mpy_ld, no PIC), so
   # it can break independently of every natmod leg above.

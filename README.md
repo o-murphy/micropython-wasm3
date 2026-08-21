@@ -42,6 +42,7 @@ better answer anyway.
 │
 ├── natmod/                     # Native module (.mpy) build
 │   ├── Makefile                # make ARCH=<x64|armv6m|xtensawin|…> dist
+│   ├── ci/run_qemu.py          # raw-REPL bridge for the QEMU test leg
 │   ├── examples/
 │   └── patches/micropython/    # mpy_ld patches, if any turn out to be needed
 │
@@ -78,7 +79,7 @@ results.
 | x64         | ✅     | ✅      | 20/20 ✅ |
 | x86 (i386)  | ✅     | ✅      | 20/20 ✅ |
 | armv6m      | ✅     | —       | not run  |
-| armv7m      | ✅     | —       | not run  |
+| armv7m      | ✅     | —       | 49/49 ✅ (QEMU) |
 | armv7emsp   | ✅     | —       | not run  |
 | armv7emdp   | ✅     | —       | not run  |
 | rv32imc     | ✅     | —       | not run  |
@@ -87,14 +88,11 @@ results.
 | xtensa      | ✅     | —       | not run  |
 
 Every arch builds in CI (`.github/workflows/natmod.yml`) and is uploaded as
-an artifact. **Only x64 and x86 have ever been executed** — those are the
-only two a GitHub runner can run natively. Nothing has been on real hardware,
-so "builds" is the whole claim for the eight cross targets: an `.mpy` that
-links is not an `.mpy` that runs.
-
-An on-target leg (armv7m under QEMU, armv6m under an RP2040 emulator, as
-`micropython-bclibc` does) needs a raw-REPL bridge this repo does not have
-yet, and is the obvious next step.
+an artifact. Three are also executed: x64 and x86 natively on the runner, and
+**armv7m as real ARM code under QEMU** (`natmod/ci/run_qemu.py`, which pushes
+the `.mpy` and every blob over the raw REPL — the qemu port has no
+filesystem). Nothing has run on real hardware yet, and for the remaining six
+cross targets "it links" is still the whole claim.
 
 The one arch that needed a fix beyond the toolchain was `xtensa` (ESP8266):
 its older GCC raises a false `-Wmaybe-uninitialized` inside wasm3's

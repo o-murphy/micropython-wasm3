@@ -37,7 +37,17 @@ def expect_raises(name, exc, fn, *args):
     check(name, False, "did not raise")
 
 
+try:
+    _INJECTED  # noqa: B018 — set by natmod/ci/run_qemu.py; absent on a host run
+except NameError:
+    _INJECTED = None
+
+
 def read(path):
+    # On QEMU there is no filesystem: the runner pushes every blob into
+    # _INJECTED over the raw REPL and this reads from there instead.
+    if _INJECTED is not None:
+        return _INJECTED[path]
     with open(path, "rb") as f:
         return f.read()
 

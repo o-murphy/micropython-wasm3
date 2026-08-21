@@ -30,6 +30,10 @@ build, `tests/`, `tools/`, `benchmarks/`).
   the test suite needs no WABT.
 - `natmod/examples/run_wiring_app.py` — runs the `wiring`-style demo blobs
   from wasm3/embedded-wasm-apps by supplying that host interface in Python.
+- `natmod/ci/run_qemu.py` — raw-REPL bridge that runs both suites on the
+  MicroPython QEMU port: the `.mpy` is served from a RAM-backed VFS and every
+  blob is injected into the target's globals, since that port has no
+  filesystem.
 - `wasm2mpy/` submodule (208 KB) purely for its `test/*.wasm` blobs, and
   `tests/test_wiring_apps.py` — 29 checks over real toolchain output from
   seven languages, asserting each app's exact stdout, its elapsed-time
@@ -58,11 +62,10 @@ results, against current `master` (v1.29.0-preview):
 
 ### Not yet done
 
-- All ten arches build in CI, but only `x64` and `x86` have ever been
-  executed — a GitHub runner can run no other. Nothing has run on real
-  hardware; for the eight cross targets "it links" is the entire claim.
-- On-target testing (QEMU armv7m, rp2040py armv6m) needs a raw-REPL bridge
-  this repo does not have.
+- All ten arches build in CI; three are executed (x64, x86, armv7m under
+  QEMU). Nothing has run on real hardware, and for the remaining six cross
+  targets "it links" is the entire claim.
+- No armv6m runtime leg yet (bclibc uses the rp2040py emulator for that).
 - No benchmarks, no release packaging.
 - `i64` marshalling goes through `mp_int_t` and will not round-trip large
   values on a 32-bit port.
