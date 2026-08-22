@@ -218,9 +218,12 @@ Known limitations:
   memory; anything needing constructors does not.
 - **A usermod needs the port to have a C heap.** wasm3 allocates through the
   port's own `calloc`, and some ports default that to nothing: on rp2,
-  `MICROPY_C_HEAP_SIZE` is `0`, so `wasm3.Module()` faults the CPU rather
-  than raising. Build with e.g. `-DMICROPY_C_HEAP_SIZE=131072`. A natmod is
-  unaffected — `src/libc_shim.c` routes it at the GC heap instead.
+  `MICROPY_C_HEAP_SIZE` is `0`. `usermod/micropython.cmake` now fails the
+  configure with an explanatory error rather than letting it become a CPU
+  fault inside `wasm3.Module()`; build with `-DMICROPY_C_HEAP_SIZE=131072`.
+  A natmod is unaffected — `src/libc_shim.c` routes it at the GC heap.
+  `ports/qemu` looks worse than rp2 here: it has neither a C heap nor a knob
+  to give it one, so a usermod there is likely blocked outright (untried).
 - Globals, WASI and the reference-types/table APIs are not exposed yet.
 
 ---

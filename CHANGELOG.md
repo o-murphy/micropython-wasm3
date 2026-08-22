@@ -66,6 +66,21 @@ what the hand-written fixtures exercise:
   whatever its toolchain chose, and the bclibc build wants 258 pages (16.1 MB)
   before it runs at all.
 
+### Added
+
+- CI builds and tests the usermod on four targets, not one: `unix-x64`,
+  `unix-x86`, `unix-aarch64` and `rp2-RPI_PICO`. Structured as a single
+  matrix job with `runs-on: ${{ matrix.runs_on }}`, following a7p's
+  `mp-usermod.yml` — aarch64 builds *natively* on `ubuntu-24.04-arm` rather
+  than through a cross-toolchain and qemu-user.
+- `natmod/ci/run_rp2040py.py --no-mpy`, for a usermod firmware, where the
+  module is built in and a `.mpy` on the filesystem would shadow the frozen
+  `wasm3.py`.
+
+`aarch64` is the row that earns the job: `dynruntime.mk` has no aarch64 ARCH,
+so a natmod cannot reach that architecture at all, and usermod is the only
+way this module runs on ARM64.
+
 ### Verified
 
 Against MicroPython v1.28.0 (the version CI pins) and, with identical

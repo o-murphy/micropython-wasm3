@@ -55,6 +55,26 @@ if(NOT EXISTS "${_VERSION_H}")
     configure_file("${_VERSION_IN}" "${_VERSION_H}" @ONLY)
 endif()
 
+# ── The port must have a C heap ───────────────────────────────────────────────
+# wasm3 allocates through the port's own calloc/free/realloc, not the
+# MicroPython GC heap (routing it there would need the slot table registered
+# with MP_REGISTER_ROOT_POINTER, since a usermod's globals live in firmware
+# .bss that gc_collect() does not scan). rp2 defines MICROPY_C_HEAP_SIZE and
+# defaults it to 0, which makes every wasm3 allocation fail and faults the CPU
+# inside wasm3.Module() with no diagnostic at all. Catch it here instead.
+#
+# Guarded on DEFINED: only rp2 has this variable. Ports with a real malloc
+# (esp32's IDF heap, for one) never define it and must not trip this.
+if(DEFINED MICROPY_C_HEAP_SIZE AND MICROPY_C_HEAP_SIZE STREQUAL "0")
+    message(FATAL_ERROR
+        "wasm3 usermod needs a C heap, but MICROPY_C_HEAP_SIZE is 0.\n"
+        "wasm3 allocates its code pages, runtime and wasm linear memory through "
+        "the port's calloc(); with no C heap every one of them fails and the "
+        "firmware faults inside wasm3.Module().\n"
+        "Configure with -DMICROPY_C_HEAP_SIZE=131072 (or more, sized to the "
+        "modules you intend to load).")
+endif()
+
 # ── Module library ────────────────────────────────────────────────────────────
 add_library(usermod_wasm3 INTERFACE)
 
