@@ -497,16 +497,35 @@ jobs:
           echo "--- personality/ELF handlers registered:"
           ls /proc/sys/fs/binfmt_misc/ 2>/dev/null || echo "  none"
 
-      - name: Build a static AArch32 binary and try to run it
+      - name: Build a freestanding AArch32 binary and try to run it
+        # Freestanding rather than a hello-world: gcc-arm-linux-gnueabihf on
+        # an arm64 host has no armhf libc headers (the first attempt died on
+        # "bits/libc-header-start.h: No such file"), and pulling
+        # libc6-dev-armhf-cross in would test the sysroot as much as the CPU.
+        # -nostdlib with a raw exit syscall needs neither.
+        #
+        # `set +e` and an explicit exit 0: this job answers a question, it
+        # does not gate anything, so neither outcome may fail the run.
         run: |
+          set +e
           sudo apt-get update -q
           sudo apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf
-          printf '#include <stdio.h>\nint main(void){puts("aarch32 ran natively");return 0;}\n' > t.c
-          arm-linux-gnueabihf-gcc -static -o t32 t.c
+          cat > t.c <<'EOF'
+          void _start(void) {
+              register int r7 __asm__("r7") = 1;   /* __NR_exit */
+              register int r0 __asm__("r0") = 0;   /* status */
+              __asm__ volatile("svc 0" :: "r"(r7), "r"(r0));
+          }
+          EOF
+          arm-linux-gnueabihf-gcc -nostdlib -static -o t32 t.c
+          echo "compile rc=$?"
           file t32
           echo "--- executing directly, no qemu:"
-          if ./t32; then
+          ./t32
+          rc=$?
+          if [ $rc -eq 0 ]; then
             echo "RESULT: AArch32 IS supported on this runner"
           else
-            echo "RESULT: AArch32 is NOT supported (exit $?)"
+            echo "RESULT: AArch32 is NOT supported (exit $rc)"
           fi
+          exit 0
