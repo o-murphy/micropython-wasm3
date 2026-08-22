@@ -88,7 +88,7 @@ from the `natmod` column.
 | mipsel (Linux)     | impossible — no mips ARCH       | 51/51 ✅ (qemu-user) |
 | Windows x64        | impossible — port has native emit off | 51/51 ✅ (native) |
 | Windows x86        | impossible — port has native emit off | 51/51 ✅ (native, WOW64) |
-| Windows arm64      | impossible — port has native emit off | in CI, native |
+| Windows arm64      | impossible — port has native emit off | 51/51 ✅ (native) |
 | armv6m (RP2040)    | 20/20 ✅ (rp2040py), blobs ⚠️   | 20/20 ✅ (rp2040py) |
 | armv7m             | 49/49 ✅ (QEMU)                 | not built          |
 | armv7emsp          | links, not run                  | not built          |
@@ -120,8 +120,25 @@ different reasons: it links against the port's own libc rather than
 (natively, on an `ubuntu-24.04-arm` runner — `dynruntime.mk` has no aarch64
 ARCH, so a natmod cannot reach that target at all), **armhf** and **mipsel**
 (cross-built, statically linked, executed under qemu-user), `ports/rp2`
-(`RPI_PICO`, run on the emulator), and `ports/windows` (cross-built with
-MSYS2, built and run natively on GitHub's Windows runners).
+(`RPI_PICO`, run on the emulator), and `ports/windows` (via MSYS2 — x64 and
+x86 on `windows-latest`, arm64 on `windows-11-arm`, each built and run
+natively on the box that produced it).
+
+"Impossible" for Windows is not a guess: `ports/windows/mpconfigport.h` sets
+`MICROPY_EMIT_X64 (0)`, and `py/persistentcode.c` gates native `.mpy`
+loading on `MICROPY_EMIT_MACHINE_CODE`. No `wasm3.mpy` loads on that port
+whatever its arch.
+
+The arm64 row builds with `-Wno-error`. MSYS2 ships no gcc for ARM64
+Windows, so it is clang, and `ports/windows/Makefile` sets `-Werror` with a
+gcc-tuned warning set that MicroPython's own sources do not survive under
+clang — `py/binary.c` promotes a `_Float16` to `float`, and
+`shared/runtime/gchelper_generic.c` declares deliberately uninitialized
+`register const long x19 asm("x19")` and friends to capture callee-saved
+registers for GC root scanning. Neither is this module's code, and neither
+is a bug. The other eight usermod jobs keep `-Werror`, so nothing of ours
+goes unchecked; this row is a build-and-run smoke test for a platform
+nothing else in the matrix reaches.
 
 The ports still uncovered, and why — the common thread is that wasm3
 allocates through the port's `calloc()`, and few ports have a C heap:
