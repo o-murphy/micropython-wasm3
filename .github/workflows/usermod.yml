@@ -311,20 +311,40 @@ jobs:
             runs_on: windows-11-arm
             msystem: CLANGARM64
             msys_install: mingw-w64-clang-aarch64-gcc-compat mingw-w64-clang-aarch64-clang
-            # ports/windows/Makefile:42 compiles with -Wdouble-promotion
-            # -Werror, and MicroPython's own py/binary.c:165 returns a
-            # _Float16 from a float-returning function. gcc does not
-            # diagnose that promotion, clang does — so upstream has never
-            # built this port with clang, and the only build that trips it
-            # is this one. Turned off for this row alone: it is upstream's
-            # warning firing on upstream's code, not something this repo
-            # can fix in MPY_DIR. CFLAGS_EXTRA is appended after the
-            # -Wdouble-promotion on that line, so it wins.
+            # MSYS2 ships no gcc for ARM64 Windows, so this row is clang,
+            # and ports/windows/Makefile:42 compiles -Werror with a warning
+            # set chosen for gcc. MicroPython's own sources do not survive
+            # that combination — upstream has evidently never built this
+            # port with clang. Three distinct classes hit so far, all in
+            # MPY_DIR, none fixable from this repo:
             #
-            # This module's own f32 promotion is fixed properly rather than
-            # silenced (src/wasm3_mp.c, WASM3_FLOAT) and stays fixed: the
-            # x64/x86 rows still compile with the warning enabled.
-            cflags_extra: "-Wno-double-promotion"
+            #   py/binary.c:165                 _Float16 -> float
+            #                                   [-Wdouble-promotion]
+            #   shared/runtime/gchelper_generic.c:136-146
+            #                                   [-Wdefault-const-init-var-unsafe]
+            #   shared/runtime/gchelper_generic.c:147-154
+            #                                   [-Wuninitialized]
+            #
+            # The gchelper ones are not even bugs: that file declares
+            # uninitialized `register const long x19 asm("x19")` and friends
+            # precisely to capture the callee-saved registers for GC root
+            # scanning.
+            #
+            # -Wno-error rather than a growing list of -Wno-<name>:
+            # enumerating them one CI round-trip at a time is what made a7p
+            # abandon this target, and -Wno-uninitialized in particular is
+            # too blunt to want. Warnings still print here; they just do not
+            # fail the build. CFLAGS_EXTRA is appended after -Werror on that
+            # line, so it wins.
+            #
+            # This costs no coverage of this module's own code: the eight
+            # other usermod jobs all still build it with -Werror. This row
+            # is a build-and-run smoke test for ARM64 Windows, nothing more.
+            # Its one real finding so far — this module's own f32 promotion —
+            # was fixed properly rather than silenced (src/wasm3_mp.c,
+            # WASM3_FLOAT), and the x64/x86 rows keep -Wdouble-promotion
+            # active to hold that fixed.
+            cflags_extra: "-Wno-error"
 
     steps:
       - uses: actions/checkout@v4
