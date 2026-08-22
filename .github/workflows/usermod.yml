@@ -590,19 +590,27 @@ jobs:
         # a plain `for f in ...std*...` glob expands alphabetically -- stderr
         # then stdout -- which buried the useful half 200 lines above the end
         # of the log on the first attempt at this step.
+        #
+        # The log files turned out not to carry the diagnostic at all: idf.py's
+        # idf_py_stderr_output_* holds only its own bookkeeping ("Command:
+        # ninja all"), and the stdout copy of ninja's stream shows the failing
+        # target and then "ninja: build stopped" with nothing in between. So
+        # dump them for context, then get the real answer by re-running ninja
+        # verbosely in the same build directory: everything is already built
+        # except the one object that failed, so this recompiles just that and
+        # prints both the exact command line and the compiler's own output.
+        # `|| true` so this step reports rather than re-failing the job.
         run: |
-          LOGDIR="$MPY_DIR/ports/esp32/build-ESP32_GENERIC/log"
-          for f in "$LOGDIR"/idf_py_stdout_output_*; do
+          BUILD="$MPY_DIR/ports/esp32/build-ESP32_GENERIC"
+          for f in "$BUILD"/log/idf_py_std*_output_*; do
             [ -f "$f" ] || continue
-            echo "::group::stdout tail: $f"
-            tail -n 20 "$f"
+            echo "::group::$f"
+            tail -n 60 "$f"
             echo "::endgroup::"
           done
-          for f in "$LOGDIR"/idf_py_stderr_output_*; do
-            [ -f "$f" ] || continue
-            echo "--- stderr: $f"
-            tail -n 120 "$f"
-          done
+          echo "--- re-running ninja verbosely to surface the diagnostic:"
+          source esp-idf/export.sh
+          ninja -C "$BUILD" -v -k 0 2>&1 | tail -n 120 || true
 
       - uses: actions/upload-artifact@v4
         with:
