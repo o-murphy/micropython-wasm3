@@ -165,11 +165,39 @@ the job. 20 on RP2040 is the core suite only — see below for why the blob
 suite does not pass there.
 
 Every arch builds in CI (`.github/workflows/natmod.yml`) and is uploaded as
-an artifact. The four executed ones are x64 and x86 natively on the runner,
+an artifact. The six executed ones are x64 and x86 natively on the runner,
 **armv7m under QEMU** (`natmod/ci/run_qemu.py`, which pushes the `.mpy` and
-every blob over the raw REPL — that port has no filesystem) and **armv6m on
-an emulated RP2040** (`natmod/ci/run_rp2040py.py`, which flashes them into a
-littlefs image, as on a real board).
+every blob over the raw REPL — that port has no filesystem), **armv6m on an
+emulated RP2040** (`natmod/ci/run_rp2040py.py`, which flashes them into a
+littlefs image, as on a real board), and **armv7emsp/armv7emdp on real ARM
+silicon** — a 32-bit armhf `ports/unix` host on `ubuntu-24.04-arm`, no
+emulator involved at all.
+
+### Not done: musl for the static unix builds
+
+The `armhf` and `mipsel` rows link `-static` against glibc, and glibc emits two
+warnings on every such link:
+
+```
+Using 'dlopen' in statically linked applications requires at runtime
+  the shared libraries from the glibc version used for linking
+Using 'getaddrinfo' in statically linked applications requires at runtime
+  the shared libraries from the glibc version used for linking
+```
+
+Both are real: glibc resolves NSS and `dlopen` through shared objects it still
+expects to find at run time, so a "static" glibc binary is not fully
+self-contained on the minimal target it was built for. musl has no NSS and a
+stub `dlopen`, so the same build against musl has neither caveat.
+
+Measured, not assumed — a musl static build came back with **zero** link
+warnings against glibc's two, `ldd` reporting `not a dynamic executable`, and
+`getaddrinfo` working. The cost is two config knobs: `MICROPY_PY_BTREE=0` and
+`MICROPY_PY_FFI=0`.
+
+Deliberately not implemented for now. Recorded here so the measurement is not
+lost and so the next person does not have to re-derive it.
+
 
 The usermod half has its own workflow (`.github/workflows/usermod.yml`) —
 separate because it shares no artifacts with the natmod jobs and fails for
