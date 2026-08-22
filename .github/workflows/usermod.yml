@@ -324,8 +324,17 @@ jobs:
 
       - name: Install wine
         if: matrix.run_tests == '1'
+        # Both packages named explicitly. On Ubuntu 24.04 the `wine64`
+        # package ships the loader and libraries but no `wine64` command --
+        # the runnable /usr/bin/wine comes from the `wine` package, which
+        # wine64 only *Recommends*. Installing wine64 alone with
+        # --no-install-recommends therefore succeeds and still leaves
+        # "wine: command not found" (a real CI failure, run 4).
+        #
+        # `wine` is Architecture: all and depends on "wine64 | wine32", so
+        # naming it here pulls in no i386 packages.
         run: |
-          sudo apt-get install -y --no-install-recommends wine64
+          sudo apt-get install -y --no-install-recommends wine64 wine
           wine --version
 
       - name: Build mpy-cross
