@@ -498,34 +498,40 @@ jobs:
           ls /proc/sys/fs/binfmt_misc/ 2>/dev/null || echo "  none"
 
       - name: Build a freestanding AArch32 binary and try to run it
-        # Freestanding rather than a hello-world: gcc-arm-linux-gnueabihf on
-        # an arm64 host has no armhf libc headers (the first attempt died on
-        # "bits/libc-header-start.h: No such file"), and pulling
-        # libc6-dev-armhf-cross in would test the sysroot as much as the CPU.
-        # -nostdlib with a raw exit syscall needs neither.
+        # Third attempt at this; the first two answered nothing. A hello-world
+        # needs armhf libc headers the arm64 host does not have, and a version
+        # using `register int r7 __asm__("r7")` is rejected outright ("r7
+        # cannot be used in 'asm' here" -- it is the frame pointer). Worse,
+        # that one printed a verdict anyway: exit 127 is "file not found",
+        # since the compile had failed, not "the CPU refused".
         #
-        # `set +e` and an explicit exit 0: this job answers a question, it
-        # does not gate anything, so neither outcome may fail the run.
+        # So: a bare asm block naming the registers inline,
+        # -fomit-frame-pointer to free r7, and a compile check that reports
+        # INCONCLUSIVE rather than guessing. Validated locally first --
+        # arm-linux-gnueabi-gcc builds it and it exits 0 under qemu-arm, so
+        # the binary itself is known good and the only variable left is
+        # whether this CPU will execute it.
         run: |
           set +e
           sudo apt-get update -q
           sudo apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf
           cat > t.c <<'EOF'
           void _start(void) {
-              register int r7 __asm__("r7") = 1;   /* __NR_exit */
-              register int r0 __asm__("r0") = 0;   /* status */
-              __asm__ volatile("svc 0" :: "r"(r7), "r"(r0));
+              __asm__ volatile("mov r0, #0\n\tmov r7, #1\n\tsvc #0");
           }
           EOF
-          arm-linux-gnueabihf-gcc -nostdlib -static -o t32 t.c
-          echo "compile rc=$?"
+          arm-linux-gnueabihf-gcc -nostdlib -fomit-frame-pointer -static -o t32 t.c
+          if [ $? -ne 0 ] || [ ! -x ./t32 ]; then
+            echo "RESULT: INCONCLUSIVE -- could not build the test binary"
+            exit 0
+          fi
           file t32
           echo "--- executing directly, no qemu:"
           ./t32
           rc=$?
-          if [ $rc -eq 0 ]; then
-            echo "RESULT: AArch32 IS supported on this runner"
-          else
-            echo "RESULT: AArch32 is NOT supported (exit $rc)"
-          fi
+          case $rc in
+            0)   echo "RESULT: AArch32 IS supported on this runner" ;;
+            126) echo "RESULT: AArch32 is NOT supported (exec format error)" ;;
+            *)   echo "RESULT: AArch32 did not run (exit $rc)" ;;
+          esac
           exit 0
