@@ -175,3 +175,96 @@ jobs:
         run: |
           python3 natmod/ci/run_rp2040py.py \
             "$MPY_DIR/ports/rp2/build-wasm3/firmware.uf2" . --no-mpy
+
+  # ── Cross-built unix: armhf and mipsel, executed under qemu-user ──────────
+  # Its own job rather than two more rows in the matrix above, because the
+  # recipe genuinely differs: a static link, libffi built from source as a
+  # separate `deplibs` pass, and a qemu-user hop to run the result. a7p
+  # splits these out the same way, for the same reason.
+  #
+  # Both are natmod-unreachable in the same sense aarch64 is: dynruntime.mk's
+  # arm ARCHes are bare-metal EABI, not the Linux ABI, and there is no mips
+  # ARCH at all. So this is the case the usermod half exists for, not a
+  # duplicate of natmod coverage.
+  #
+  # Toolchain and package choices follow upstream MicroPython's own
+  # tools/ci.sh (ci_unix_qemu_arm_*/ci_unix_qemu_mips_*) rather than being
+  # reconstructed: gnueabi not gnueabihf, mipsel via gcc-mipsel-linux-gnu.
+  usermod-cross:
+    name: build + test (unix-${{ matrix.arch }}, static)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: armhf
+            cross_compile: arm-linux-gnueabi-
+            apt: gcc-arm-linux-gnueabi g++-arm-linux-gnueabi
+            qemu_bin: qemu-arm-static
+          - arch: mipsel
+            cross_compile: mipsel-linux-gnu-
+            apt: gcc-mipsel-linux-gnu g++-mipsel-linux-gnu libc6-mipsel-cross
+            qemu_bin: qemu-mipsel-static
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/fetch-micropython
+        with:
+          mpy_tag: ${{ env.MPY_TAG }}
+
+      - name: Install the cross toolchain and qemu-user
+        # autoconf/libtool/libtool-bin/libltdl-dev are for MICROPY_STANDALONE=1's
+        # own autotools build of lib/libffi. No libffi-dev: the point of
+        # STANDALONE is to build a static libffi.a for the *target*, which the
+        # host's libffi-dev cannot provide.
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            ${{ matrix.apt }} \
+            autoconf libtool libtool-bin libltdl-dev pkg-config qemu-user-static
+          ${{ matrix.qemu_bin }} --version
+
+      - name: Build mpy-cross
+        run: make -C "$MPY_DIR/mpy-cross"
+
+      - name: Build libffi for ${{ matrix.arch }}
+        # MICROPY_STANDALONE=1 makes libffi a DEPLIBS entry, not a prerequisite
+        # of the default target, so `deplibs` has to run as its own pass. BUILD
+        # must match the next step's: deplibs writes libffi.a under
+        # $(BUILD)/lib/libffi/out/lib and the main build looks for it there.
+        #
+        # BUILD stays a shell local rather than job env — py/mkenv.mk has
+        # `BUILD ?= build`, so an inherited BUILD would also reroot the
+        # mpy-cross build above.
+        run: |
+          BUILD="$GITHUB_WORKSPACE/usermod/build/${{ matrix.arch }}"
+          make -C "$MPY_DIR/ports/unix" VARIANT=standard \
+            BUILD="$BUILD" CROSS_COMPILE=${{ matrix.cross_compile }} \
+            MICROPY_STANDALONE=1 deplibs
+
+      - name: Build usermod firmware (${{ matrix.arch }}, static)
+        # -static is a deployability requirement, not a CI convenience: these
+        # targets are minimal embedded Linux boards that cannot be assumed to
+        # have a matching ld.so/libc. Same reasoning as
+        # micropython/micropython#17456.
+        run: |
+          BUILD="$GITHUB_WORKSPACE/usermod/build/${{ matrix.arch }}"
+          make -C "$MPY_DIR/ports/unix" VARIANT=standard \
+            BUILD="$BUILD" CROSS_COMPILE=${{ matrix.cross_compile }} \
+            MICROPY_STANDALONE=1 LDFLAGS_EXTRA="-static" \
+            USER_C_MODULES="$GITHUB_WORKSPACE" \
+            FROZEN_MANIFEST="$GITHUB_WORKSPACE/usermod/manifest.py" \
+            -j"$(nproc)"
+
+      - name: Run tests under ${{ matrix.qemu_bin }}
+        # Invoked explicitly rather than relying on qemu-user-static's
+        # binfmt_misc handler, so the job does not depend on the runner
+        # image having that registration.
+        run: |
+          cd tests
+          BIN="$GITHUB_WORKSPACE/usermod/build/${{ matrix.arch }}/micropython"
+          ${{ matrix.qemu_bin }} "$BIN" test_wasm3.py
+          ${{ matrix.qemu_bin }} "$BIN" test_wiring_apps.py --slow

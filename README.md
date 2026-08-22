@@ -84,6 +84,8 @@ from the `natmod` column.
 | x64                | 51/51 ✅                        | 51/51 ✅           |
 | x86 (i386)         | 51/51 ✅                        | 51/51 ✅           |
 | aarch64            | impossible — no such `dynruntime.mk` ARCH | 51/51 ✅ |
+| armhf (Linux)      | impossible — arm ARCHes are bare-metal EABI | 51/51 ✅ (qemu-user) |
+| mipsel (Linux)     | impossible — no mips ARCH       | 51/51 ✅ (qemu-user) |
 | armv6m (RP2040)    | 20/20 ✅ (rp2040py), blobs ⚠️   | 20/20 ✅ (rp2040py) |
 | armv7m             | 49/49 ✅ (QEMU)                 | not built          |
 | armv7emsp          | links, not run                  | not built          |
@@ -113,8 +115,23 @@ separate because it shares no artifacts with the natmod jobs and fails for
 different reasons: it links against the port's own libc rather than
 `src/libc_shim.c`. It covers `ports/unix` on x64, x86 and **aarch64**
 (natively, on an `ubuntu-24.04-arm` runner — `dynruntime.mk` has no aarch64
-ARCH, so a natmod cannot reach that target at all) plus `ports/rp2`
+ARCH, so a natmod cannot reach that target at all), **armhf** and **mipsel**
+(cross-built, statically linked, executed under qemu-user), plus `ports/rp2`
 (`RPI_PICO`, run on the emulator).
+
+Three targets that comparable projects do build are deliberately absent, so
+the gap is a decision rather than an oversight:
+
+- **`ports/qemu` (armv7m) as a usermod** — blocked, not skipped. wasm3
+  allocates through the port's `calloc()`, and that port has neither a
+  malloc nor a `MICROPY_C_HEAP_SIZE` knob to give it one. natmod already
+  runs armv7m under QEMU functionally, so the missing coverage is narrow.
+- **`ports/webassembly`** — natmod genuinely cannot reach it (no WASM ARCH),
+  but the result would be wasm3 interpreting wasm inside wasm, which is not
+  a deployment target anyone here has.
+- **`ports/windows` (MinGW x86/x64)** — a real gap. Left out pending a check
+  of whether a natmod `.mpy` loads on that port at all; if it does, the
+  usermod build adds little.
 
 ### armv6m runs out of native stack, not RAM
 
