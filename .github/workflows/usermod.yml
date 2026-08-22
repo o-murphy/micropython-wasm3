@@ -301,14 +301,30 @@ jobs:
             runs_on: windows-latest
             msystem: MINGW64
             msys_install: mingw-w64-x86_64-gcc
+            cflags_extra: ""
           - arch: x86
             runs_on: windows-latest
             msystem: MINGW32
             msys_install: mingw-w64-i686-gcc
+            cflags_extra: ""
           - arch: arm64
             runs_on: windows-11-arm
             msystem: CLANGARM64
             msys_install: mingw-w64-clang-aarch64-gcc-compat mingw-w64-clang-aarch64-clang
+            # ports/windows/Makefile:42 compiles with -Wdouble-promotion
+            # -Werror, and MicroPython's own py/binary.c:165 returns a
+            # _Float16 from a float-returning function. gcc does not
+            # diagnose that promotion, clang does — so upstream has never
+            # built this port with clang, and the only build that trips it
+            # is this one. Turned off for this row alone: it is upstream's
+            # warning firing on upstream's code, not something this repo
+            # can fix in MPY_DIR. CFLAGS_EXTRA is appended after the
+            # -Wdouble-promotion on that line, so it wins.
+            #
+            # This module's own f32 promotion is fixed properly rather than
+            # silenced (src/wasm3_mp.c, WASM3_FLOAT) and stays fixed: the
+            # x64/x86 rows still compile with the warning enabled.
+            cflags_extra: "-Wno-double-promotion"
 
     steps:
       - uses: actions/checkout@v4
@@ -369,7 +385,7 @@ jobs:
         run: |
           make -C "$MPY_DIR/ports/windows" \
             BUILD=build-wasm3 PROG=micropython-wasm3.exe \
-            STRIP="" SIZE="true" \
+            STRIP="" SIZE="true" CFLAGS_EXTRA="${{ matrix.cflags_extra }}" \
             USER_C_MODULES="$(pwd)" \
             FROZEN_MANIFEST="$(pwd)/usermod/manifest.py" \
             -j"$(nproc)"
