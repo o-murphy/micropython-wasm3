@@ -145,10 +145,28 @@ nothing else in the matrix reaches.
 The ports still uncovered, and why — the common thread is that wasm3
 allocates through the port's `calloc()`, and few ports have a C heap:
 
-- **`ports/qemu` (armv7m) as a usermod** — blocked, not skipped. wasm3
-  allocates through the port's `calloc()`, and that port has neither a
-  malloc nor a `MICROPY_C_HEAP_SIZE` knob to give it one. natmod already
-  runs armv7m under QEMU functionally, so the missing coverage is narrow.
+- **`ports/qemu` (armv7m) as a usermod** — attempted, and the wall is
+  further in than this file used to claim. `ports/qemu/Makefile:74` links
+  `-nostdlib` with only libgcc, so the build reaches the linker and fails
+  on both halves at once: libm (`sqrt`, `rint`, `trunc`, `floor`, `ceil`,
+  `rintf`) and libc (`calloc`, `free`, `realloc`).
+
+  `src/libc_shim.c` and `src/math_shim.c` already supply exactly those —
+  it is what they exist for — but they allocate through `m_realloc_maybe`,
+  i.e. the GC heap, and a usermod's globals live in firmware `.bss`, which
+  `gc_collect()` does not scan. Compiling them in without more would link
+  cleanly and then corrupt: the same failure the GC-heap experiment
+  produced on unix.
+
+  So this needs `MP_REGISTER_ROOT_POINTER`, and the bookkeeping is the easy
+  half. MicroPython's GC only traces a candidate pointer that lands on a
+  block boundary, so interior pointers are not followed, and wasm3 holds
+  plenty of them. Establishing that every live wasm3 allocation stays
+  reachable through a block-aligned pointer is the real work. Genuinely
+  open, not a CI knob.
+
+  natmod already runs armv7m under QEMU at 49/49, so the missing coverage
+  is narrow.
 - **`ports/esp32`** — cannot be built in the environment this was developed
   in: the ESP-IDF component registry (`components-file.espressif.com`) is
   unreachable there, and `espressif/mdns` and `espressif/lan867x` are real
@@ -165,6 +183,16 @@ allocates through the port's `calloc()`, and few ports have a C heap:
   all, so `calloc()` has nothing to allocate from. Same prerequisite as
   esp8266: routing wasm3's allocations at the GC heap, done properly with a
   registered root pointer.
+
+### f64 narrows on single-precision ports
+
+`mp_float_t` is `float` wherever `MICROPY_FLOAT_IMPL_FLOAT` is selected —
+`ports/qemu` among them, which rejects the implicit conversion outright
+under `-Werror=float-conversion`. A wasm `f64` returned to Python therefore
+loses precision on those ports. The conversion is explicit in
+`src/wasm3_mp.c` so it is visible rather than accidental, but it is a real
+limitation and not merely a compiler complaint: use `f32` exports, or a
+double-precision port, if the extra bits matter.
 
 ### armv6m runs out of native stack, not RAM
 
