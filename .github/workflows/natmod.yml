@@ -291,6 +291,24 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
 
+      - name: Build mpy-cross
+        # Explicit, and load-bearing here for a reason specific to this job.
+        # py/mkrules.mk auto-builds mpy-cross as a prerequisite of the port
+        # build, and CFLAGS_EXTRA leaks into that sub-make through MAKEFLAGS.
+        # mpy-cross/mpconfigport.h:77 defines MICROPY_FLOAT_IMPL
+        # unconditionally -- no #ifndef, unlike the unix port's
+        # mpconfigvariant_common.h -- and mpy-cross compiles -Werror, so the
+        # armv7emsp row's -DMICROPY_FLOAT_IMPL=... collided with it:
+        #
+        #   ./mpconfigport.h:77: error: "MICROPY_FLOAT_IMPL" redefined
+        #   <command-line>: note: this is the location of the previous
+        #
+        # A real failure of the first version of this job. Building mpy-cross
+        # here, natively for arm64 and with no CFLAGS_EXTRA in sight, means
+        # the binary already exists when the port build looks for it and that
+        # auto-build path never runs.
+        run: make -C "$MPY_DIR/mpy-cross" -j"$(nproc)"
+
       - name: Build a 32-bit ARM micropython host
         # MICROPY_PY_FFI=0/MICROPY_PY_BTREE=0: both want target libraries the
         # cross toolchain does not ship (armhf libffi headers in particular),
