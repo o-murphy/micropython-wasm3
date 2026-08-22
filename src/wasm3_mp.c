@@ -152,7 +152,12 @@ static mp_obj_t wasm_to_py(M3ValueType type, const wasm3_val_t *v) {
         case c_m3Type_i32: return mp_obj_new_int((mp_int_t)(int32_t)v->i32);
         case c_m3Type_i64: return mp_obj_new_int((mp_int_t)(int64_t)v->i64);
         case c_m3Type_f32: return mp_obj_new_float(WASM3_FLOAT(v->f32));
-        case c_m3Type_f64: return mp_obj_new_float(v->f64);
+        /* Narrowing, not a promotion, on a single-precision port: ports/qemu
+         * and others build with MICROPY_FLOAT_IMPL_FLOAT, where mp_float_t is
+         * float and -Werror=float-conversion rejects the implicit form. Made
+         * explicit because it is real: a wasm f64 handed to Python loses
+         * precision on those ports. See README under Limitations. */
+        case c_m3Type_f64: return mp_obj_new_float(WASM3_FLOAT(v->f64));
         default: WASM3_RAISE_VALUE("unsupported wasm value type");
     }
     return mp_const_none;
