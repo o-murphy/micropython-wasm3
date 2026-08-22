@@ -1,0 +1,177 @@
+name: usermod
+
+# The module compiled into firmware via USER_C_MODULES, rather than loaded at
+# runtime as a .mpy -- see natmod.yml for that half, which covers every ARCH
+# natmod/Makefile supports.
+#
+# Its own file rather than a job inside natmod.yml, matching
+# micropython-bclibc's usermod.yml and a7p's mp-usermod.yml: the two halves
+# share no artifacts and no `needs:`, they are triggered by different paths
+# (usermod/ vs natmod/), and they fail for entirely different reasons -- a
+# usermod links against the port's own libc, a natmod against src/libc_shim.c.
+# Keeping them in one file only meant one red X standing for both.
+#
+# Scope note: a7p's policy is to build usermod only where natmod *can't*
+# reach, which would leave just the aarch64 row here (dynruntime.mk has no
+# aarch64 ARCH at all, and GitHub's ubuntu-24.04-arm runners are free on
+# public repos and GA since August 2025 -- a native build, no cross-compiler,
+# no qemu-user, no Docker). The x64/x86/rp2 rows do duplicate targets natmod
+# already covers, and they stay anyway: linking against the port's libc
+# instead of the shim is a genuinely different build, and it has already
+# produced one real defect that natmod could not have caught (rp2's
+# zero-byte C heap faulting the CPU inside wasm3.Module()).
+#
+# Deliberately no workflow_call trigger: nothing built here -- full
+# interpreters and firmware images -- is a distributable artifact, so unlike
+# natmod.yml this has no place in a release pipeline. Same call a7p makes.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    paths:
+      - "wasm3"
+      - "src/**"
+      - "usermod/**"
+      - "tests/**"
+      - "tools/**"
+      # The rp2 row drives the emulator with natmod/ci/run_rp2040py.py --
+      # one script for both halves rather than a copy per workflow.
+      - "natmod/ci/**"
+      - ".github/workflows/usermod.yml"
+      - ".github/actions/**"
+  workflow_dispatch:
+    inputs:
+      mpy_tag:
+        description: "MicroPython release tag (e.g. v1.28.0)"
+        required: false
+        default: "v1.28.0"
+
+concurrency:
+  # Literal "usermod-" prefix rather than ${{ github.workflow }}, for the same
+  # reason natmod.yml spells its group out: that expression resolves to the
+  # *caller's* workflow name under workflow_call and can collide silently.
+  group: usermod-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned, not floating: a usermod does not carry the .mpy ABI constraint a
+  # natmod does, but USER_C_MODULES/py.mk and the rp2 cmake plumbing both move
+  # between releases. Bump deliberately, re-running the whole matrix.
+  MPY_TAG: ${{ github.event.inputs.mpy_tag || 'v1.28.0' }}
+
+jobs:
+  # ── One matrix, one job, each row carrying everything it needs -- the shape
+  # a7p's mp-usermod.yml uses, rather than a separate job per target. ────────
+  usermod:
+    name: usermod (${{ matrix.port }}-${{ matrix.arch_label }})
+    runs-on: ${{ matrix.runs_on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - port: unix
+            arch_label: x64
+            runs_on: ubuntu-latest
+          - port: unix
+            arch_label: x86
+            runs_on: ubuntu-latest
+            force_32bit: "1"
+          - port: unix
+            arch_label: aarch64
+            runs_on: ubuntu-24.04-arm
+          - port: rp2
+            arch_label: RPI_PICO
+            runs_on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/fetch-micropython
+        with:
+          mpy_tag: ${{ env.MPY_TAG }}
+
+      - name: Install unix build deps
+        if: matrix.port == 'unix' && matrix.arch_label != 'x86'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y libffi-dev pkg-config
+
+      - name: Install 32-bit build deps
+        if: matrix.arch_label == 'x86'
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -q
+          sudo apt-get install -y gcc-multilib libffi-dev:i386 pkg-config
+
+      - name: Install the ARM toolchain and emulator
+        if: matrix.port == 'rp2'
+        # libstdc++-arm-none-eabi-newlib: pico-sdk compiles one .cpp of its
+        # own, which fails with "cstdlib: No such file or directory" without it.
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            gcc-arm-none-eabi libnewlib-arm-none-eabi \
+            libstdc++-arm-none-eabi-newlib cmake
+          pip install "rp2040py==0.3.1" littlefs-python
+
+      - name: Build mpy-cross
+        # Explicitly, before FROZEN_MANIFEST ever appears on a command line --
+        # py/mkenv.mk's auto-build rule for it races under -j.
+        run: make -C "$MPY_DIR/mpy-cross"
+
+      # No `make submodules` step: MPY_DIR is the official release tarball,
+      # which already ships lib/mbedtls, lib/berkeley-db-1.xx and
+      # lib/micropython-lib vendored in and has no .git, so `git submodule`
+      # against it just fails. ports/unix/README.md says the same -- the step
+      # "can be skipped if you didn't clone the MicroPython source from git".
+      - name: Build usermod firmware (unix)
+        if: matrix.port == 'unix'
+        run: |
+          make -C "$MPY_DIR/ports/unix" VARIANT=standard \
+            BUILD=build-wasm3 PROG=micropython-wasm3 \
+            MICROPY_FORCE_32BIT=${{ matrix.force_32bit || '0' }} \
+            USER_C_MODULES="$GITHUB_WORKSPACE" \
+            FROZEN_MANIFEST="$GITHUB_WORKSPACE/usermod/manifest.py" \
+            -j"$(nproc)"
+
+      - name: Build usermod firmware (rp2)
+        if: matrix.port == 'rp2'
+        # Two steps rather than one: ports/rp2/Makefile builds its cmake
+        # arguments with `CMAKE_ARGS +=`, so passing CMAKE_ARGS= on the command
+        # line replaces the lot -- including MICROPY_BOARD, USER_C_MODULES and
+        # MICROPY_FROZEN_MANIFEST. Configure normally, then add the one extra
+        # define to the existing cache.
+        #
+        # MICROPY_C_HEAP_SIZE is not optional here: rp2 defaults it to 0, and
+        # wasm3 allocates through the port's calloc(). usermod/micropython.cmake
+        # fails the configure outright if it is left at 0.
+        run: |
+          cd "$MPY_DIR/ports/rp2"
+          make BOARD=RPI_PICO BUILD=build-wasm3 \
+            USER_C_MODULES="$GITHUB_WORKSPACE/usermod/micropython.cmake" \
+            FROZEN_MANIFEST="$GITHUB_WORKSPACE/usermod/manifest.py" || true
+          cmake -S . -B build-wasm3 -DMICROPY_C_HEAP_SIZE=131072
+          make BOARD=RPI_PICO BUILD=build-wasm3 \
+            USER_C_MODULES="$GITHUB_WORKSPACE/usermod/micropython.cmake" \
+            FROZEN_MANIFEST="$GITHUB_WORKSPACE/usermod/manifest.py" \
+            -j"$(nproc)"
+
+      - name: Run tests (unix)
+        if: matrix.port == 'unix'
+        # No wasm3.mpy in tests/ -- it would shadow the frozen wasm3.py.
+        run: |
+          cd tests
+          "$MPY_DIR/ports/unix/build-wasm3/micropython-wasm3" test_wasm3.py
+          "$MPY_DIR/ports/unix/build-wasm3/micropython-wasm3" test_wiring_apps.py --slow
+
+      - name: Run tests (rp2, on the emulator)
+        if: matrix.port == 'rp2'
+        # --no-mpy: the module is in the firmware, so the littlefs image
+        # carries only the .wasm blobs. Core suite only, for the same reason
+        # the natmod armv6m leg runs only that -- see README under Status.
+        run: |
+          python3 natmod/ci/run_rp2040py.py \
+            "$MPY_DIR/ports/rp2/build-wasm3/firmware.uf2" . --no-mpy

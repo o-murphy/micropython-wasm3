@@ -76,9 +76,10 @@ results.
 
 | Target      | natmod | usermod | tests    |
 | ----------- | ------ | ------- | -------- |
-| x64         | ✅     | ✅      | 20/20 ✅ |
-| x86 (i386)  | ✅     | ✅      | 20/20 ✅ |
-| armv6m      | ✅     | —       | 20/20 ✅ (rp2040py), blobs ⚠️ |
+| x64         | ✅     | ✅      | 49/49 ✅ |
+| x86 (i386)  | ✅     | ✅      | 49/49 ✅ |
+| aarch64     | — (no such `dynruntime.mk` ARCH) | ✅ | 49/49 ✅ |
+| armv6m      | ✅     | ✅ (rp2) | 20/20 ✅ (rp2040py), blobs ⚠️ |
 | armv7m      | ✅     | —       | 49/49 ✅ (QEMU) |
 | armv7emsp   | ✅     | —       | not run  |
 | armv7emdp   | ✅     | —       | not run  |
@@ -95,6 +96,14 @@ an emulated RP2040** (`natmod/ci/run_rp2040py.py`, which flashes them into a
 littlefs image, as on a real board). Nothing has run on physical hardware
 yet, and for the remaining five cross targets "it links" is still the whole
 claim.
+
+The usermod half has its own workflow (`.github/workflows/usermod.yml`) —
+separate because it shares no artifacts with the natmod jobs and fails for
+different reasons: it links against the port's own libc rather than
+`src/libc_shim.c`. It covers `ports/unix` on x64, x86 and **aarch64**
+(natively, on an `ubuntu-24.04-arm` runner — `dynruntime.mk` has no aarch64
+ARCH, so a natmod cannot reach that target at all) plus `ports/rp2`
+(`RPI_PICO`, run on the emulator).
 
 ### armv6m runs out of native stack, not RAM
 
