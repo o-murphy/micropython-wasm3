@@ -137,7 +137,7 @@ which is a different claim entirely.
 | `webassembly`     | wasm, under node                  | 51/51 ✅           |
 | `rp2`             | `RPI_PICO`, on rp2040py           | 20/20 ✅           |
 | `qemu`            | armv7m                            | blocked, see below |
-| `esp32`           | —                                 | untried, see below |
+| `esp32`           | `ESP32_GENERIC`, build-only       | builds ⏳, see below |
 | `esp8266`         | —                                 | unsafe, see below  |
 | `stm32`, `samd`, `nrf`, `alif`, `zephyr`, `cc3200` | — | no C heap |
 | `mimxrt`, `renesas-ra` | —                            | plausible, untried |
@@ -255,13 +255,25 @@ allocates through the port's `calloc()`, and few ports have a C heap:
 
   natmod already runs armv7m under QEMU at 49/49, so the missing coverage
   is narrow.
-- **`ports/esp32`** — cannot be built in the environment this was developed
-  in: the ESP-IDF component registry (`components-file.espressif.com`) is
-  unreachable there, and `espressif/mdns` and `espressif/lan867x` are real
-  dependencies of the port for the esp32 target, not vendored in the release
-  tarball. Nothing about the module suggests a problem — the xtensa natmod
-  already builds, and the IDF supplies a real heap — but it stays out rather
-  than going in unverified.
+- **`ports/esp32`** — now in CI as a **build-only** job
+  (`BOARD=ESP32_GENERIC`, ESP-IDF v5.5.1), the one target here with no
+  execution step: there is no esp32 emulator to hand a firmware image to the
+  way rp2040py takes an RP2040 `.uf2`.
+
+  It used to say "cannot be built" here, and that was a claim about one
+  machine rather than about the target. `dl.espressif.com` and
+  `components-file.espressif.com` are both refused by this project's
+  development environment, and `espressif/mdns` and `espressif/lan867x` are
+  real dependencies of the port for target esp32, vendored in neither the
+  release tarball nor esp-idf itself — so it could not be checked locally
+  before pushing, which is this repo's usual bar. On a GitHub runner none of
+  that applies: esp-idf's own `install.sh` runs there green in
+  micropython-bclibc's natmod xtensawin leg.
+
+  The genuinely open question is size, not portability. wasm3 is an
+  interpreter rather than a leaf module, and a usermod goes into the firmware
+  image — so this is the first target where the port's flash and IRAM budget
+  is a real constraint on it. A red result is informative either way.
 - **`ports/esp8266`** — worse than uncovered: it would build and then be
   silently wrong. `ports/esp8266/posix_helpers.c:35` implements `malloc` as
   `gc_alloc`, and a usermod's globals live in firmware `.bss`, which
