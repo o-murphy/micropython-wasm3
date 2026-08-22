@@ -86,8 +86,8 @@ from the `natmod` column.
 | aarch64            | impossible — no such `dynruntime.mk` ARCH | 51/51 ✅ |
 | armhf (Linux)      | impossible — arm ARCHes are bare-metal EABI | 51/51 ✅ (qemu-user) |
 | mipsel (Linux)     | impossible — no mips ARCH       | 51/51 ✅ (qemu-user) |
-| Windows x64        | impossible — port has native emit off | in CI, native |
-| Windows x86        | impossible — port has native emit off | in CI, native (WOW64) |
+| Windows x64        | impossible — port has native emit off | 51/51 ✅ (native) |
+| Windows x86        | impossible — port has native emit off | 51/51 ✅ (native, WOW64) |
 | Windows arm64      | impossible — port has native emit off | in CI, native |
 | armv6m (RP2040)    | 20/20 ✅ (rp2040py), blobs ⚠️   | 20/20 ✅ (rp2040py) |
 | armv7m             | 49/49 ✅ (QEMU)                 | not built          |

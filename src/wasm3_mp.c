@@ -142,7 +142,11 @@ static mp_obj_t wasm_to_py(M3ValueType type, const wasm3_val_t *v) {
     switch (type) {
         case c_m3Type_i32: return mp_obj_new_int((mp_int_t)(int32_t)v->i32);
         case c_m3Type_i64: return mp_obj_new_int((mp_int_t)(int64_t)v->i64);
-        case c_m3Type_f32: return mp_obj_new_float(v->f32);
+        /* Explicit: clang warns on the implicit float -> double promotion
+         * under -Wdouble-promotion, which ports/windows compiles with
+         * -Werror on CLANGARM64. mp_float_t rather than double so this
+         * stays a no-op under MICROPY_FLOAT_IMPL_FLOAT. */
+        case c_m3Type_f32: return mp_obj_new_float((mp_float_t)v->f32);
         case c_m3Type_f64: return mp_obj_new_float(v->f64);
         default: WASM3_RAISE_VALUE("unsupported wasm value type");
     }
