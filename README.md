@@ -86,6 +86,8 @@ from the `natmod` column.
 | aarch64            | impossible — no such `dynruntime.mk` ARCH | 51/51 ✅ |
 | armhf (Linux)      | impossible — arm ARCHes are bare-metal EABI | 51/51 ✅ (qemu-user) |
 | mipsel (Linux)     | impossible — no mips ARCH       | 51/51 ✅ (qemu-user) |
+| Windows x64        | impossible — port has native emit off | 51/51 ✅ (wine) |
+| Windows x86        | impossible — port has native emit off | builds, not run |
 | armv6m (RP2040)    | 20/20 ✅ (rp2040py), blobs ⚠️   | 20/20 ✅ (rp2040py) |
 | armv7m             | 49/49 ✅ (QEMU)                 | not built          |
 | armv7emsp          | links, not run                  | not built          |
@@ -116,11 +118,12 @@ different reasons: it links against the port's own libc rather than
 `src/libc_shim.c`. It covers `ports/unix` on x64, x86 and **aarch64**
 (natively, on an `ubuntu-24.04-arm` runner — `dynruntime.mk` has no aarch64
 ARCH, so a natmod cannot reach that target at all), **armhf** and **mipsel**
-(cross-built, statically linked, executed under qemu-user), plus `ports/rp2`
-(`RPI_PICO`, run on the emulator).
+(cross-built, statically linked, executed under qemu-user), `ports/rp2`
+(`RPI_PICO`, run on the emulator), and `ports/windows` (cross-built with
+mingw-w64; the x64 build runs its suites under wine).
 
-Three targets that comparable projects do build are deliberately absent, so
-the gap is a decision rather than an oversight:
+The ports still uncovered, and why — the common thread is that wasm3
+allocates through the port's `calloc()`, and few ports have a C heap:
 
 - **`ports/qemu` (armv7m) as a usermod** — blocked, not skipped. wasm3
   allocates through the port's `calloc()`, and that port has neither a
@@ -129,9 +132,22 @@ the gap is a decision rather than an oversight:
 - **`ports/webassembly`** — natmod genuinely cannot reach it (no WASM ARCH),
   but the result would be wasm3 interpreting wasm inside wasm, which is not
   a deployment target anyone here has.
-- **`ports/windows` (MinGW x86/x64)** — a real gap. Left out pending a check
-  of whether a natmod `.mpy` loads on that port at all; if it does, the
-  usermod build adds little.
+- **`ports/esp32`** — cannot be built in the environment this was developed
+  in: the ESP-IDF component registry (`components-file.espressif.com`) is
+  unreachable there, and `espressif/mdns` and `espressif/lan867x` are real
+  dependencies of the port for the esp32 target, not vendored in the release
+  tarball. Nothing about the module suggests a problem — the xtensa natmod
+  already builds, and the IDF supplies a real heap — but it stays out rather
+  than going in unverified.
+- **`ports/esp8266`** — worse than uncovered: it would build and then be
+  silently wrong. `ports/esp8266/posix_helpers.c:35` implements `malloc` as
+  `gc_alloc`, and a usermod's globals live in firmware `.bss`, which
+  `gc_collect()` does not scan — the same defect that made the GC-heap
+  experiment segfault on unix. Needs `MP_REGISTER_ROOT_POINTER` first.
+- **`ports/stm32`, `samd`, `nrf`, `alif`, `zephyr`, `cc3200`** — no C heap at
+  all, so `calloc()` has nothing to allocate from. Same prerequisite as
+  esp8266: routing wasm3's allocations at the GC heap, done properly with a
+  registered root pointer.
 
 ### armv6m runs out of native stack, not RAM
 

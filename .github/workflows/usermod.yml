@@ -268,3 +268,89 @@ jobs:
           BIN="$GITHUB_WORKSPACE/usermod/build/${{ matrix.arch }}/micropython"
           ${{ matrix.qemu_bin }} "$BIN" test_wasm3.py
           ${{ matrix.qemu_bin }} "$BIN" test_wiring_apps.py --slow
+
+  # ── Cross-built Windows (mingw-w64), x64 executed under wine ─────────────
+  # The one target where natmod is not merely absent but impossible for a
+  # reason in the port's own config: ports/windows/mpconfigport.h sets
+  # MICROPY_EMIT_X64 (0), and py/persistentcode.c gates native .mpy loading
+  # on MICROPY_EMIT_MACHINE_CODE (= MICROPY_EMIT_NATIVE || _INLINE_ASM). So a
+  # wasm3.mpy cannot be loaded there at all, whatever its arch — usermod is
+  # the only way this module runs on Windows.
+  #
+  # Cross-compiled from Linux rather than built on windows-latest under
+  # MSYS2. Both are legitimate — ports/windows/README.md documents the cross
+  # build first — and this one is what was actually verified before being
+  # committed. a7p takes the MSYS2 route and needs several workarounds for
+  # it (STRIP=""/SIZE="true", $(pwd) instead of $GITHUB_WORKSPACE because
+  # MSYS2 bash eats the backslashes in a Windows path); moving here would
+  # also mean replacing .github/actions/fetch-micropython, which uses wget
+  # and POSIX paths. Worth doing when Windows-native execution of *both*
+  # arches is wanted; not worth guessing at now.
+  usermod-windows:
+    name: ${{ matrix.jobname }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            jobname: build + test (windows-x64, mingw)
+            cross_compile: x86_64-w64-mingw32-
+            apt: gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
+            run_tests: "1"
+          - arch: x86
+            # Build-check only. Running a 32-bit PE needs wine's WOW64 half
+            # (wine32:i386), whose dependency tree does not resolve cleanly
+            # on a plain 24.04 image. The 32-bit code path is not untested
+            # for it — unix-x86 and armhf both execute the full suite.
+            jobname: build (windows-x86, mingw)
+            cross_compile: i686-w64-mingw32-
+            apt: gcc-mingw-w64-i686 g++-mingw-w64-i686
+            run_tests: ""
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/fetch-micropython
+        with:
+          mpy_tag: ${{ env.MPY_TAG }}
+
+      - name: Install the mingw-w64 toolchain
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends ${{ matrix.apt }}
+
+      - name: Install wine
+        if: matrix.run_tests == '1'
+        run: |
+          sudo apt-get install -y --no-install-recommends wine64
+          wine --version
+
+      - name: Build mpy-cross
+        # Host mpy-cross, not cross-built: it only has to run here, to freeze
+        # wasm3.py. ports/windows/README.md's own Debian recipe does the same.
+        run: make -C "$MPY_DIR/mpy-cross"
+
+      - name: Build usermod firmware (windows-${{ matrix.arch }})
+        run: |
+          make -C "$MPY_DIR/ports/windows" \
+            CROSS_COMPILE=${{ matrix.cross_compile }} \
+            BUILD=build-wasm3 PROG=micropython-wasm3.exe \
+            USER_C_MODULES="$GITHUB_WORKSPACE" \
+            FROZEN_MANIFEST="$GITHUB_WORKSPACE/usermod/manifest.py" \
+            -j"$(nproc)"
+
+      - name: Check it is a Windows PE for the right arch
+        run: file "$MPY_DIR/ports/windows/build-wasm3/micropython-wasm3.exe"
+
+      - name: Run tests under wine
+        if: matrix.run_tests == '1'
+        env:
+          WINEDEBUG: "-all"
+        run: |
+          cd tests
+          EXE="$MPY_DIR/ports/windows/build-wasm3/micropython-wasm3.exe"
+          wine "$EXE" test_wasm3.py
+          wine "$EXE" test_wiring_apps.py --slow
