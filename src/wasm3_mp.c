@@ -39,9 +39,18 @@
  * rather than relying on m_del, which dynruntime.h redefines m_free out from
  * under. */
 #define WASM3_FREE(ptr, nbytes) m_free(ptr)
+/* No cast needed: mp_obj_new_float above already applies (double). And
+ * mp_float_t must not be named here at all -- dynruntime.mk selects
+ * MICROPY_FLOAT_IMPL=none for xtensa, rv32imc and rv64imc, where the type
+ * does not exist. */
+#define WASM3_FLOAT(x) (x)
 #else
 #include "py/runtime.h"
 #include "py/objarray.h"
+/* Explicit float -> mp_float_t: clang enables -Wdouble-promotion where gcc
+ * does not, and ports/windows compiles with -Werror. mp_float_t rather than
+ * double so it stays a no-op under MICROPY_FLOAT_IMPL_FLOAT. */
+#define WASM3_FLOAT(x) ((mp_float_t)(x))
 #define WASM3_RAISE(msg) mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT(msg))
 #define WASM3_RAISE_VALUE(msg) mp_raise_msg(&mp_type_ValueError, MP_ERROR_TEXT(msg))
 #define WASM3_FREE(ptr, nbytes) m_del(uint8_t, (ptr), (nbytes))
@@ -142,11 +151,7 @@ static mp_obj_t wasm_to_py(M3ValueType type, const wasm3_val_t *v) {
     switch (type) {
         case c_m3Type_i32: return mp_obj_new_int((mp_int_t)(int32_t)v->i32);
         case c_m3Type_i64: return mp_obj_new_int((mp_int_t)(int64_t)v->i64);
-        /* Explicit: clang warns on the implicit float -> double promotion
-         * under -Wdouble-promotion, which ports/windows compiles with
-         * -Werror on CLANGARM64. mp_float_t rather than double so this
-         * stays a no-op under MICROPY_FLOAT_IMPL_FLOAT. */
-        case c_m3Type_f32: return mp_obj_new_float((mp_float_t)v->f32);
+        case c_m3Type_f32: return mp_obj_new_float(WASM3_FLOAT(v->f32));
         case c_m3Type_f64: return mp_obj_new_float(v->f64);
         default: WASM3_RAISE_VALUE("unsupported wasm value type");
     }
