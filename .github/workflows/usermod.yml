@@ -417,3 +417,62 @@ jobs:
           EXE="$MPY_DIR/ports/windows/build-wasm3/micropython-wasm3.exe"
           "$EXE" test_wasm3.py
           "$EXE" test_wiring_apps.py --slow
+
+  # ── ports/webassembly: wasm3 compiled to wasm, run under node ─────────────
+  # natmod cannot reach this port either — dynruntime.mk has no WASM ARCH, and
+  # the mechanism is architecturally different anyway. So, like aarch64,
+  # armhf, mipsel and Windows, this is a target usermod is the only route to.
+  #
+  # It is also the odd one conceptually: an interpreter for wasm, itself
+  # compiled to wasm. That is a real configuration — wasm3 upstream supports
+  # it — and it turns out to work here unmodified, so it stays as a genuine
+  # portability datapoint rather than a curiosity: 32-bit target, a libc that
+  # is neither glibc nor newlib, and no filesystem at all.
+  usermod-wasm:
+    name: build + test (webassembly)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/fetch-micropython
+        with:
+          mpy_tag: ${{ env.MPY_TAG }}
+
+      - name: Install emsdk
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git
+          (cd emsdk && ./emsdk install latest && ./emsdk activate latest)
+
+      - name: Build mpy-cross
+        run: make -C "$MPY_DIR/mpy-cross"
+
+      - name: Build usermod (webassembly, pyscript variant)
+        run: |
+          source emsdk/emsdk_env.sh
+          make -C "$MPY_DIR/ports/webassembly" VARIANT=pyscript \
+            BUILD="$GITHUB_WORKSPACE/usermod/build/wasm" \
+            USER_C_MODULES="$GITHUB_WORKSPACE" \
+            FROZEN_MANIFEST="$GITHUB_WORKSPACE/usermod/manifest.py" \
+            -j"$(nproc)"
+
+      - name: Run both suites under node
+        # Via natmod/ci/run_wasm.py rather than `node micropython.mjs
+        # test_wasm3.py` directly: this port gives the interpreter no
+        # filesystem, so open() raises OSError 44 for every blob even though
+        # node itself read the script off the host. The runner prepends them
+        # through the same _INJECTED hook the QEMU runner uses.
+        run: |
+          python3 natmod/ci/run_wasm.py \
+            usermod/build/wasm/micropython.mjs test_wasm3.py
+          python3 natmod/ci/run_wasm.py \
+            usermod/build/wasm/micropython.mjs test_wiring_apps.py --slow
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm3-usermod-webassembly
+          path: |
+            usermod/build/wasm/micropython.mjs
+            usermod/build/wasm/micropython.wasm
+          if-no-files-found: error

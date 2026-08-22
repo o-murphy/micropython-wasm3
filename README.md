@@ -89,6 +89,7 @@ from the `natmod` column.
 | Windows x64        | impossible — port has native emit off | 51/51 ✅ (native) |
 | Windows x86        | impossible — port has native emit off | 51/51 ✅ (native, WOW64) |
 | Windows arm64      | impossible — port has native emit off | 51/51 ✅ (native) |
+| webassembly        | impossible — no WASM ARCH       | 51/51 ✅ (node) |
 | armv6m (RP2040)    | 20/20 ✅ (rp2040py), blobs ⚠️   | 20/20 ✅ (rp2040py) |
 | armv7m             | 49/49 ✅ (QEMU)                 | not built          |
 | armv7emsp          | links, not run                  | not built          |
@@ -122,7 +123,8 @@ ARCH, so a natmod cannot reach that target at all), **armhf** and **mipsel**
 (cross-built, statically linked, executed under qemu-user), `ports/rp2`
 (`RPI_PICO`, run on the emulator), and `ports/windows` (via MSYS2 — x64 and
 x86 on `windows-latest`, arm64 on `windows-11-arm`, each built and run
-natively on the box that produced it).
+natively on the box that produced it), and `ports/webassembly` (wasm3
+compiled to wasm, run under node).
 
 "Impossible" for Windows is not a guess: `ports/windows/mpconfigport.h` sets
 `MICROPY_EMIT_X64 (0)`, and `py/persistentcode.c` gates native `.mpy`
@@ -147,9 +149,6 @@ allocates through the port's `calloc()`, and few ports have a C heap:
   allocates through the port's `calloc()`, and that port has neither a
   malloc nor a `MICROPY_C_HEAP_SIZE` knob to give it one. natmod already
   runs armv7m under QEMU functionally, so the missing coverage is narrow.
-- **`ports/webassembly`** — natmod genuinely cannot reach it (no WASM ARCH),
-  but the result would be wasm3 interpreting wasm inside wasm, which is not
-  a deployment target anyone here has.
 - **`ports/esp32`** — cannot be built in the environment this was developed
   in: the ESP-IDF component registry (`components-file.espressif.com`) is
   unreachable there, and `espressif/mdns` and `espressif/lan867x` are real

@@ -25,6 +25,12 @@ import time
 import wasm3
 
 try:
+    _ARGV  # noqa: B018 — set by natmod/ci/run_wasm.py
+except NameError:
+    # ports/webassembly's sys has no argv at all, so this cannot just read it.
+    _ARGV = getattr(sys, "argv", [])
+
+try:
     _INJECTED  # noqa: B018 — set by natmod/ci/run_qemu.py; absent on a host run
 except NameError:
     _INJECTED = None
@@ -187,7 +193,7 @@ print("fixture cross-check:")
 check("simple.wasm == generated add.wasm",
       read(WASM_DIR + "simple.wasm") == read("wasm/add.wasm"))
 
-if "--slow" in sys.argv:
+if "--slow" in _ARGV:
     print("coremark:")
     out, _, _ = run_app("coremark", stack=16384, loops=1, real_clock=True)
     check("coremark ran", "Running CoreMark" in out, repr(out[:60]))
