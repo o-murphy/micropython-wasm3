@@ -14,10 +14,15 @@ fixed blob into one `.mpy` and runs it at near-native speed).
 
 Two integration modes, same Python API:
 
-| Approach                | Location   | Architectures                                  | Deployment                            |
-| ----------------------- | ---------- | ---------------------------------------------- | ------------------------------------- |
-| **natmod** (`.mpy`)     | `natmod/`  | x64, x86, armv6m–armv7emdp, xtensa, rv32/64imc | Copy `.mpy` to the device filesystem  |
-| **usermod** (baked in)  | `usermod/` | any port with `USER_C_MODULES` support         | Built into firmware — no file to copy |
+| Approach               | Location   | Selected by | Covered in CI                                        | Deployment                           |
+| ---------------------- | ---------- | ----------- | ---------------------------------------------------- | ------------------------------------ |
+| **natmod** (`.mpy`)    | `natmod/`  | `ARCH`      | all 10 `dynruntime.mk` ARCHes                        | Copy `.mpy` to the device filesystem |
+| **usermod** (baked in) | `usermod/` | port        | `unix`, `windows`, `webassembly`, `rp2` — 10 targets | Built into firmware — no file to copy |
+
+A natmod reaches only the architectures `py/dynruntime.mk` knows about; a
+usermod reaches any port with `USER_C_MODULES`, which is how aarch64, armhf,
+mipsel, Windows and wasm are covered at all. See [Status](#status) for the
+per-target results and for the ports still out of reach.
 
 Unlike `micropython-bclibc`, whose layout this repository follows, there is
 no FFI mode: an FFI wrapper would need a `libwasm3.so` and the `ffi` module,
@@ -74,30 +79,56 @@ v1.28.0** — the version CI pins, and the latest release tag. Both build modes
 were also checked against current `master` (v1.29.0-preview) with identical
 results.
 
-Each cell is that build mode's own test result on that target — the two are
-built and run independently, so a ✅ under `usermod` is a suite that actually
-executed against a firmware with the module compiled in, not an inference
-from the `natmod` column.
+The two halves are built and run independently, so a ✅ below is always a
+suite that actually executed on that target — never an inference from the
+other mode.
 
-| Target             | natmod                          | usermod            |
-| ------------------ | ------------------------------- | ------------------ |
-| x64                | 51/51 ✅                        | 51/51 ✅           |
-| x86 (i386)         | 51/51 ✅                        | 51/51 ✅           |
-| aarch64            | impossible — no such `dynruntime.mk` ARCH | 51/51 ✅ |
-| armhf (Linux)      | impossible — arm ARCHes are bare-metal EABI | 51/51 ✅ (qemu-user) |
-| mipsel (Linux)     | impossible — no mips ARCH       | 51/51 ✅ (qemu-user) |
-| Windows x64        | impossible — port has native emit off | 51/51 ✅ (native) |
-| Windows x86        | impossible — port has native emit off | 51/51 ✅ (native, WOW64) |
-| Windows arm64      | impossible — port has native emit off | 51/51 ✅ (native) |
-| webassembly        | impossible — no WASM ARCH       | 51/51 ✅ (node) |
-| armv6m (RP2040)    | 20/20 ✅ (rp2040py), blobs ⚠️   | 20/20 ✅ (rp2040py) |
-| armv7m             | 49/49 ✅ (QEMU)                 | not built          |
-| armv7emsp          | links, not run                  | not built          |
-| armv7emdp          | links, not run                  | not built          |
-| rv32imc            | links, not run                  | not built          |
-| rv64imc            | links, not run                  | not built          |
-| xtensawin (ESP32)  | links, not run                  | not built          |
-| xtensa (ESP8266)   | links, not run                  | not built          |
+They are also keyed on different things, so they get a table each. A
+natmod is selected by `ARCH`, and the ten values below are every one
+`py/dynruntime.mk` defines — there is no eleventh to add. A usermod is
+selected by *port*, and any port with `USER_C_MODULES` is a candidate.
+
+### natmod — by `ARCH`
+
+| ARCH               | built | executed                        |
+| ------------------ | :---: | ------------------------------- |
+| x64                | ✅    | 51/51 ✅ on the runner          |
+| x86                | ✅    | 51/51 ✅ on the runner          |
+| armv7m             | ✅    | 49/49 ✅ under QEMU (MPS2_AN385) |
+| armv6m             | ✅    | 20/20 ✅ on rp2040py, blobs ⚠️  |
+| armv7emsp          | ✅    | —                               |
+| armv7emdp          | ✅    | —                               |
+| rv32imc            | ✅    | —                               |
+| rv64imc            | ✅    | —                               |
+| xtensa (ESP8266)   | ✅    | —                               |
+| xtensawin (ESP32)  | ✅    | —                               |
+
+Four of ten are executed. For the other six "it links" is the whole claim,
+and nothing has run on physical hardware yet.
+
+### usermod — by port
+
+| Port              | targets in CI                     | result             |
+| ----------------- | --------------------------------- | ------------------ |
+| `unix`            | x64, x86                          | 51/51 ✅ each      |
+| `unix`            | aarch64 (native runner)           | 51/51 ✅           |
+| `unix`            | armhf, mipsel (static, qemu-user) | 51/51 ✅ each      |
+| `windows`         | x64, x86 (WOW64), arm64           | 51/51 ✅ each      |
+| `webassembly`     | wasm, under node                  | 51/51 ✅           |
+| `rp2`             | `RPI_PICO`, on rp2040py           | 20/20 ✅           |
+| `qemu`            | armv7m                            | blocked, see below |
+| `esp32`           | —                                 | untried, see below |
+| `esp8266`         | —                                 | unsafe, see below  |
+| `stm32`, `samd`, `nrf`, `alif`, `zephyr`, `cc3200` | — | no C heap |
+| `mimxrt`, `renesas-ra` | —                            | plausible, untried |
+
+Ten targets across six ports. Every one of them runs the suites — there is
+no build-only row here, unlike the natmod table.
+
+The last four rows come from reading the v1.28.0 tree rather than from
+trying each: wasm3 allocates through the port's `calloc()`, `mimxrt` and
+`renesas-ra` provide `_sbrk`, and the six listed as having no C heap
+provide neither that nor a malloc of their own.
 
 51 = `test_wasm3.py` (20) plus `test_wiring_apps.py --slow` (31, CoreMark
 included). 49 on armv7m is the same pair without CoreMark, which is left out
@@ -106,25 +137,26 @@ the job. 20 on RP2040 is the core suite only — see below for why the blob
 suite does not pass there.
 
 Every arch builds in CI (`.github/workflows/natmod.yml`) and is uploaded as
-an artifact. Four are also executed: x64 and x86 natively on the runner,
+an artifact. The four executed ones are x64 and x86 natively on the runner,
 **armv7m under QEMU** (`natmod/ci/run_qemu.py`, which pushes the `.mpy` and
 every blob over the raw REPL — that port has no filesystem) and **armv6m on
 an emulated RP2040** (`natmod/ci/run_rp2040py.py`, which flashes them into a
-littlefs image, as on a real board). Nothing has run on physical hardware
-yet, and for the remaining five cross targets "it links" is still the whole
-claim.
+littlefs image, as on a real board).
 
 The usermod half has its own workflow (`.github/workflows/usermod.yml`) —
 separate because it shares no artifacts with the natmod jobs and fails for
 different reasons: it links against the port's own libc rather than
-`src/libc_shim.c`. It covers `ports/unix` on x64, x86 and **aarch64**
-(natively, on an `ubuntu-24.04-arm` runner — `dynruntime.mk` has no aarch64
-ARCH, so a natmod cannot reach that target at all), **armhf** and **mipsel**
-(cross-built, statically linked, executed under qemu-user), `ports/rp2`
-(`RPI_PICO`, run on the emulator), and `ports/windows` (via MSYS2 — x64 and
-x86 on `windows-latest`, arm64 on `windows-11-arm`, each built and run
-natively on the box that produced it), and `ports/webassembly` (wasm3
-compiled to wasm, run under node).
+`src/libc_shim.c`.
+
+Most of that table is targets a natmod cannot reach at all, which is what
+the usermod half is for: `dynruntime.mk` has no aarch64 ARCH and no mips
+ARCH, its arm ARCHes are bare-metal EABI rather than the Linux ABI, and
+there is no WASM ARCH. The x64, x86 and RP2040 rows do overlap the natmod
+table, and stay anyway — linking against the port's libc instead of
+`src/libc_shim.c` is a genuinely different build, and that difference has
+already produced one real defect (rp2's zero-byte C heap faulting the CPU
+inside `wasm3.Module()`) and one real portability bug (the `f64` narrowing
+below, found by `ports/qemu`).
 
 "Impossible" for Windows is not a guess: `ports/windows/mpconfigport.h` sets
 `MICROPY_EMIT_X64 (0)`, and `py/persistentcode.c` gates native `.mpy`
@@ -138,7 +170,7 @@ clang — `py/binary.c` promotes a `_Float16` to `float`, and
 `shared/runtime/gchelper_generic.c` declares deliberately uninitialized
 `register const long x19 asm("x19")` and friends to capture callee-saved
 registers for GC root scanning. Neither is this module's code, and neither
-is a bug. The other eight usermod jobs keep `-Werror`, so nothing of ours
+is a bug. The other nine usermod jobs keep `-Werror`, so nothing of ours
 goes unchecked; this row is a build-and-run smoke test for a platform
 nothing else in the matrix reaches.
 
