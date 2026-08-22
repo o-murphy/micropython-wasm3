@@ -64,7 +64,7 @@ jobs:
   # ── One matrix, one job, each row carrying everything it needs -- the shape
   # a7p's mp-usermod.yml uses, rather than a separate job per target. ────────
   usermod:
-    name: usermod (${{ matrix.port }}-${{ matrix.arch_label }})
+    name: build + test (${{ matrix.port }}-${{ matrix.arch_label }})
     runs-on: ${{ matrix.runs_on }}
     strategy:
       fail-fast: false

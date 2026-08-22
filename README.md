@@ -74,19 +74,30 @@ v1.28.0** — the version CI pins, and the latest release tag. Both build modes
 were also checked against current `master` (v1.29.0-preview) with identical
 results.
 
-| Target      | natmod | usermod | tests    |
-| ----------- | ------ | ------- | -------- |
-| x64         | ✅     | ✅      | 49/49 ✅ |
-| x86 (i386)  | ✅     | ✅      | 49/49 ✅ |
-| aarch64     | — (no such `dynruntime.mk` ARCH) | ✅ | 49/49 ✅ |
-| armv6m      | ✅     | ✅ (rp2) | 20/20 ✅ (rp2040py), blobs ⚠️ |
-| armv7m      | ✅     | —       | 49/49 ✅ (QEMU) |
-| armv7emsp   | ✅     | —       | not run  |
-| armv7emdp   | ✅     | —       | not run  |
-| rv32imc     | ✅     | —       | not run  |
-| rv64imc     | ✅     | —       | not run  |
-| xtensawin   | ✅     | —       | not run  |
-| xtensa      | ✅     | —       | not run  |
+Each cell is that build mode's own test result on that target — the two are
+built and run independently, so a ✅ under `usermod` is a suite that actually
+executed against a firmware with the module compiled in, not an inference
+from the `natmod` column.
+
+| Target             | natmod                          | usermod            |
+| ------------------ | ------------------------------- | ------------------ |
+| x64                | 51/51 ✅                        | 51/51 ✅           |
+| x86 (i386)         | 51/51 ✅                        | 51/51 ✅           |
+| aarch64            | impossible — no such `dynruntime.mk` ARCH | 51/51 ✅ |
+| armv6m (RP2040)    | 20/20 ✅ (rp2040py), blobs ⚠️   | 20/20 ✅ (rp2040py) |
+| armv7m             | 49/49 ✅ (QEMU)                 | not built          |
+| armv7emsp          | links, not run                  | not built          |
+| armv7emdp          | links, not run                  | not built          |
+| rv32imc            | links, not run                  | not built          |
+| rv64imc            | links, not run                  | not built          |
+| xtensawin (ESP32)  | links, not run                  | not built          |
+| xtensa (ESP8266)   | links, not run                  | not built          |
+
+51 = `test_wasm3.py` (20) plus `test_wiring_apps.py --slow` (31, CoreMark
+included). 49 on armv7m is the same pair without CoreMark, which is left out
+there because interpreted wasm inside an emulated Cortex-M3 would dominate
+the job. 20 on RP2040 is the core suite only — see below for why the blob
+suite does not pass there.
 
 Every arch builds in CI (`.github/workflows/natmod.yml`) and is uploaded as
 an artifact. Four are also executed: x64 and x86 natively on the runner,
