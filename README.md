@@ -86,8 +86,9 @@ from the `natmod` column.
 | aarch64            | impossible — no such `dynruntime.mk` ARCH | 51/51 ✅ |
 | armhf (Linux)      | impossible — arm ARCHes are bare-metal EABI | 51/51 ✅ (qemu-user) |
 | mipsel (Linux)     | impossible — no mips ARCH       | 51/51 ✅ (qemu-user) |
-| Windows x64        | impossible — port has native emit off | 51/51 ✅ (wine) |
-| Windows x86        | impossible — port has native emit off | builds, not run |
+| Windows x64        | impossible — port has native emit off | in CI, native |
+| Windows x86        | impossible — port has native emit off | in CI, native (WOW64) |
+| Windows arm64      | impossible — port has native emit off | in CI, native |
 | armv6m (RP2040)    | 20/20 ✅ (rp2040py), blobs ⚠️   | 20/20 ✅ (rp2040py) |
 | armv7m             | 49/49 ✅ (QEMU)                 | not built          |
 | armv7emsp          | links, not run                  | not built          |
@@ -120,7 +121,7 @@ different reasons: it links against the port's own libc rather than
 ARCH, so a natmod cannot reach that target at all), **armhf** and **mipsel**
 (cross-built, statically linked, executed under qemu-user), `ports/rp2`
 (`RPI_PICO`, run on the emulator), and `ports/windows` (cross-built with
-mingw-w64; the x64 build runs its suites under wine).
+MSYS2, built and run natively on GitHub's Windows runners).
 
 The ports still uncovered, and why — the common thread is that wasm3
 allocates through the port's `calloc()`, and few ports have a C heap:

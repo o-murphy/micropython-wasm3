@@ -269,7 +269,7 @@ jobs:
           ${{ matrix.qemu_bin }} "$BIN" test_wasm3.py
           ${{ matrix.qemu_bin }} "$BIN" test_wiring_apps.py --slow
 
-  # ── Cross-built Windows (mingw-w64), x64 executed under wine ─────────────
+  # ── Windows, built and run natively on GitHub's own Windows runners ──────
   # The one target where natmod is not merely absent but impossible for a
   # reason in the port's own config: ports/windows/mpconfigport.h sets
   # MICROPY_EMIT_X64 (0), and py/persistentcode.c gates native .mpy loading
@@ -277,89 +277,107 @@ jobs:
   # wasm3.mpy cannot be loaded there at all, whatever its arch — usermod is
   # the only way this module runs on Windows.
   #
-  # Cross-compiled from Linux rather than built on windows-latest under
-  # MSYS2. Both are legitimate — ports/windows/README.md documents the cross
-  # build first — and this one is what was actually verified before being
-  # committed. a7p takes the MSYS2 route and needs several workarounds for
-  # it (STRIP=""/SIZE="true", $(pwd) instead of $GITHUB_WORKSPACE because
-  # MSYS2 bash eats the backslashes in a Windows path); moving here would
-  # also mean replacing .github/actions/fetch-micropython, which uses wget
-  # and POSIX paths. Worth doing when Windows-native execution of *both*
-  # arches is wanted; not worth guessing at now.
+  # x64 and x86 use MSYS2's plain MINGW64/MINGW32 environments and their
+  # unprefixed gcc — the same recipe upstream MicroPython's own build-mingw
+  # job uses (.github/workflows/ports_windows.yml). windows-latest is a real
+  # x64 box, so the 32-bit build runs there natively through WOW64.
+  #
+  # arm64 is on windows-11-arm via MSYS2's CLANGARM64. Upstream does not test
+  # Windows ARM64, so there is no proven recipe — but a7p's mp-usermod.yml
+  # recorded, in comments, every failure it hit before dropping that row, and
+  # the overrides below come from there rather than from guessing. See the
+  # note on each one.
   usermod-windows:
-    name: ${{ matrix.jobname }}
-    runs-on: ubuntu-latest
+    name: build + test (windows-${{ matrix.arch }})
+    runs-on: ${{ matrix.runs_on }}
+    defaults:
+      run:
+        shell: msys2 {0}
     strategy:
       fail-fast: false
       matrix:
         include:
           - arch: x64
-            jobname: build + test (windows-x64, mingw)
-            cross_compile: x86_64-w64-mingw32-
-            apt: gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
-            run_tests: "1"
+            runs_on: windows-latest
+            msystem: MINGW64
+            msys_install: mingw-w64-x86_64-gcc
           - arch: x86
-            # Build-check only. Running a 32-bit PE needs wine's WOW64 half
-            # (wine32:i386), whose dependency tree does not resolve cleanly
-            # on a plain 24.04 image. The 32-bit code path is not untested
-            # for it — unix-x86 and armhf both execute the full suite.
-            jobname: build (windows-x86, mingw)
-            cross_compile: i686-w64-mingw32-
-            apt: gcc-mingw-w64-i686 g++-mingw-w64-i686
-            run_tests: ""
+            runs_on: windows-latest
+            msystem: MINGW32
+            msys_install: mingw-w64-i686-gcc
+          - arch: arm64
+            runs_on: windows-11-arm
+            msystem: CLANGARM64
+            msys_install: mingw-w64-clang-aarch64-gcc-compat mingw-w64-clang-aarch64-clang
 
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - uses: ./.github/actions/fetch-micropython
+      - uses: msys2/setup-msys2@v2
         with:
-          mpy_tag: ${{ env.MPY_TAG }}
+          msystem: ${{ matrix.msystem }}
+          update: false
+          # curl/tar/xz for the fetch step below: this job cannot use
+          # .github/actions/fetch-micropython, which shells out to wget and
+          # writes a $GITHUB_WORKSPACE (backslash) path into MPY_DIR.
+          install: make git python3 curl tar xz ${{ matrix.msys_install }}
 
-      - name: Install the mingw-w64 toolchain
+      - name: Fetch MicroPython ${{ env.MPY_TAG }}
+        # POSIX paths throughout ($(pwd), not $GITHUB_WORKSPACE). MSYS2 bash
+        # treats the backslashes in "D:\a\repo\repo" as escape characters
+        # and silently eats them, which turns every path built from it into
+        # garbage — the failure a7p documented against USER_C_MODULES.
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y --no-install-recommends ${{ matrix.apt }}
-
-      - name: Install wine
-        if: matrix.run_tests == '1'
-        # Both packages named explicitly. On Ubuntu 24.04 the `wine64`
-        # package ships the loader and libraries but no `wine64` command --
-        # the runnable /usr/bin/wine comes from the `wine` package, which
-        # wine64 only *Recommends*. Installing wine64 alone with
-        # --no-install-recommends therefore succeeds and still leaves
-        # "wine: command not found" (a real CI failure, run 4).
-        #
-        # `wine` is Architecture: all and depends on "wine64 | wine32", so
-        # naming it here pulls in no i386 packages.
-        run: |
-          sudo apt-get install -y --no-install-recommends wine64 wine
-          wine --version
+          VER="${MPY_TAG#v}"
+          curl -fsSL -o mpy.tar.xz \
+            "https://github.com/micropython/micropython/releases/download/${MPY_TAG}/micropython-${VER}.tar.xz"
+          tar xf mpy.tar.xz && rm mpy.tar.xz
+          echo "MPY_DIR=$(pwd)/micropython-${VER}" >> "$GITHUB_ENV"
 
       - name: Build mpy-cross
-        # Host mpy-cross, not cross-built: it only has to run here, to freeze
-        # wasm3.py. ports/windows/README.md's own Debian recipe does the same.
-        run: make -C "$MPY_DIR/mpy-cross"
+        # STRIP=""/SIZE="true" on every arch, not just the one that needs
+        # them. py/mkenv.mk defines STRIP/SIZE as $(CROSS_COMPILE)strip and
+        # -size unconditionally, and CLANGARM64's gcc-compat package ships
+        # neither. STRIP="" works because py/mkrules.mk guards that step with
+        # `ifdef STRIP` and Make treats an empty value as undefined; SIZE has
+        # no such guard, so it needs a real no-op binary rather than "".
+        #
+        # LDFLAGS_ARCH: mpy-cross/Makefile hardcodes `--cref` for every
+        # non-Darwin host. Fine for GNU ld, but CLANGARM64 links through
+        # clang+lld, which rejects it outright. The map file's cross-
+        # reference table is diagnostic only.
+        #
+        # COMPILER_TARGET: mpy-cross/Makefile decides whether to compile
+        # ports/windows/fmode.c by grepping `$(CC) -dumpmachine` for
+        # "mingw". Real mingw-w64 gcc reports x86_64-w64-mingw32 and matches;
+        # CLANGARM64's wrapper is clang underneath and does not, so fmode.c
+        # is silently dropped and the link fails on set_fmode_binary. Forcing
+        # a value containing "mingw" is correct for all three environments.
+        run: |
+          make -C "$MPY_DIR/mpy-cross" \
+            LDFLAGS_ARCH="-Wl,--gc-sections" COMPILER_TARGET="mingw-forced" \
+            STRIP="" SIZE="true" -j"$(nproc)"
 
       - name: Build usermod firmware (windows-${{ matrix.arch }})
+        # CROSS_COMPILE is left empty deliberately: inside an MSYS2
+        # environment the toolchain is already the target's, under unprefixed
+        # names. That also makes WINDRES (py/mkenv.mk: $(CROSS_COMPILE)windres)
+        # resolve to plain `windres`, which gcc-compat does provide — the
+        # prefixed aarch64-w64-mingw32-windres is what does not exist.
         run: |
           make -C "$MPY_DIR/ports/windows" \
-            CROSS_COMPILE=${{ matrix.cross_compile }} \
             BUILD=build-wasm3 PROG=micropython-wasm3.exe \
-            USER_C_MODULES="$GITHUB_WORKSPACE" \
-            FROZEN_MANIFEST="$GITHUB_WORKSPACE/usermod/manifest.py" \
+            STRIP="" SIZE="true" \
+            USER_C_MODULES="$(pwd)" \
+            FROZEN_MANIFEST="$(pwd)/usermod/manifest.py" \
             -j"$(nproc)"
 
-      - name: Check it is a Windows PE for the right arch
-        run: file "$MPY_DIR/ports/windows/build-wasm3/micropython-wasm3.exe"
-
-      - name: Run tests under wine
-        if: matrix.run_tests == '1'
-        env:
-          WINEDEBUG: "-all"
+      - name: Run tests
+        # Natively, on the box that built it — no emulation anywhere.
         run: |
           cd tests
           EXE="$MPY_DIR/ports/windows/build-wasm3/micropython-wasm3.exe"
-          wine "$EXE" test_wasm3.py
-          wine "$EXE" test_wiring_apps.py --slow
+          "$EXE" test_wasm3.py
+          "$EXE" test_wiring_apps.py --slow
