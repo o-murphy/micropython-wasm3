@@ -476,3 +476,37 @@ jobs:
             usermod/build/wasm/micropython.mjs
             usermod/build/wasm/micropython.wasm
           if-no-files-found: error
+
+  # ── Probe: can a GitHub ARM64 runner execute AArch32 natively? ────────────
+  # Temporary. If it can, the armhf rows in usermod-cross (and the equivalents
+  # in micropython-bclibc and a7p) could drop qemu-user and run on real
+  # hardware instead. If it cannot, that is settled with evidence rather than
+  # by quoting a CPU datasheet.
+  probe-aarch32:
+    name: probe (AArch32 on ubuntu-24.04-arm)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: What is this machine
+        run: |
+          uname -m
+          grep -m1 -E "^(model name|CPU implementer|CPU part)" /proc/cpuinfo || true
+          echo "--- CPU architecture line(s):"
+          grep -E "^CPU architecture" /proc/cpuinfo | head -2 || true
+          echo "--- kernel 32-bit compat (CONFIG_COMPAT):"
+          zgrep -E "^CONFIG_COMPAT=" /proc/config.gz 2>/dev/null || echo "  /proc/config.gz not available"
+          echo "--- personality/ELF handlers registered:"
+          ls /proc/sys/fs/binfmt_misc/ 2>/dev/null || echo "  none"
+
+      - name: Build a static AArch32 binary and try to run it
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf
+          printf '#include <stdio.h>\nint main(void){puts("aarch32 ran natively");return 0;}\n' > t.c
+          arm-linux-gnueabihf-gcc -static -o t32 t.c
+          file t32
+          echo "--- executing directly, no qemu:"
+          if ./t32; then
+            echo "RESULT: AArch32 IS supported on this runner"
+          else
+            echo "RESULT: AArch32 is NOT supported (exit $?)"
+          fi
