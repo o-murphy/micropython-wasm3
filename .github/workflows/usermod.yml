@@ -576,6 +576,22 @@ jobs:
             USER_C_MODULES="$GITHUB_WORKSPACE/usermod/micropython.cmake" \
             FROZEN_MANIFEST="$GITHUB_WORKSPACE/usermod/manifest.py"
 
+      - name: Dump the IDF build logs
+        if: failure()
+        # idf.py redirects the compiler's own stderr into
+        # build-*/log/idf_py_stderr_output_<pid> and prints only "ninja failed
+        # with exit code 1" to the console, so a failing compile leaves no
+        # diagnostic in the Actions log at all -- which is exactly what
+        # happened on this job's first run (it stopped in
+        # wasm3/source/m3_compile.c with nothing to say why). Surface them.
+        run: |
+          for f in "$MPY_DIR"/ports/esp32/build-ESP32_GENERIC/log/idf_py_std*_output_*; do
+            [ -f "$f" ] || continue
+            echo "::group::$f"
+            tail -n 200 "$f"
+            echo "::endgroup::"
+          done
+
       - uses: actions/upload-artifact@v4
         with:
           name: wasm3-usermod-esp32
