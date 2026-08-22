@@ -112,7 +112,8 @@ and nothing has run on physical hardware yet.
 | ----------------- | --------------------------------- | ------------------ |
 | `unix`            | x64, x86                          | 51/51 ✅ each      |
 | `unix`            | aarch64 (native runner)           | 51/51 ✅           |
-| `unix`            | armhf, mipsel (static, qemu-user) | 51/51 ✅ each      |
+| `unix`            | armhf (static, real AArch32)      | pending re-run ⏳  |
+| `unix`            | mipsel (static, qemu-user)        | 51/51 ✅           |
 | `windows`         | x64, x86 (WOW64), arm64           | 51/51 ✅ each      |
 | `webassembly`     | wasm, under node                  | 51/51 ✅           |
 | `rp2`             | `RPI_PICO`, on rp2040py           | 20/20 ✅           |
@@ -123,7 +124,17 @@ and nothing has run on physical hardware yet.
 | `mimxrt`, `renesas-ra` | —                            | plausible, untried |
 
 Ten targets across six ports. Every one of them runs the suites — there is
-no build-only row here, unlike the natmod table.
+no build-only row here, unlike the natmod table. Nine of the ten now run on
+real hardware; only mipsel is emulated, because GitHub has no mips runner.
+
+armhf is the one marked pending, because it has only just moved off qemu:
+`ubuntu-24.04-arm` executes 32-bit ARM directly — measured on the runner
+itself, not assumed from a datasheet — so the arm64 runner cross-builds the
+binary and then runs it on its own CPU. It passed 51/51 under qemu-user on
+every run up to now; the first run on real hardware has not reported yet.
+The move is also why that row switched from upstream's `gnueabi` to
+`gnueabihf`: soft-float armel baselines at ARMv5TE, whose SWP atomics ARMv8
+removed outright.
 
 The last four rows come from reading the v1.28.0 tree rather than from
 trying each: wasm3 allocates through the port's `calloc()`, `mimxrt` and

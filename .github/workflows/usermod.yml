@@ -176,34 +176,51 @@ jobs:
           python3 natmod/ci/run_rp2040py.py \
             "$MPY_DIR/ports/rp2/build-wasm3/firmware.uf2" . --no-mpy
 
-  # ── Cross-built unix: armhf and mipsel, executed under qemu-user ──────────
+  # ── Cross-built unix: armhf on real hardware, mipsel under qemu-user ──────
   # Its own job rather than two more rows in the matrix above, because the
-  # recipe genuinely differs: a static link, libffi built from source as a
-  # separate `deplibs` pass, and a qemu-user hop to run the result. a7p
-  # splits these out the same way, for the same reason.
+  # recipe genuinely differs: a static link and libffi built from source as a
+  # separate `deplibs` pass. a7p splits these out the same way, for the same
+  # reason.
   #
   # Both are natmod-unreachable in the same sense aarch64 is: dynruntime.mk's
   # arm ARCHes are bare-metal EABI, not the Linux ABI, and there is no mips
   # ARCH at all. So this is the case the usermod half exists for, not a
   # duplicate of natmod coverage.
   #
-  # Toolchain and package choices follow upstream MicroPython's own
-  # tools/ci.sh (ci_unix_qemu_arm_*/ci_unix_qemu_mips_*) rather than being
-  # reconstructed: gnueabi not gnueabihf, mipsel via gcc-mipsel-linux-gnu.
+  # armhf no longer runs under qemu. The probe job that used to live at the
+  # bottom of this file measured it directly: a statically linked, freestanding
+  # AArch32 binary executes on ubuntu-24.04-arm with no emulation and no
+  # binfmt handler ("RESULT: AArch32 IS supported on this runner", usermod run
+  # #18). So the arm64 runner cross-builds the 32-bit binary and then runs it
+  # on its own CPU -- a real execution test on real hardware, where before it
+  # was an interpreter's opinion of one. mipsel keeps qemu-user: GitHub has no
+  # mips runner and never will.
+  #
+  # That move is also why armhf switched from gnueabi to gnueabihf, departing
+  # from upstream's own tools/ci.sh (ci_unix_qemu_arm_* uses gnueabi). Under
+  # qemu the ABI choice is nearly free -- the emulator implements whatever
+  # ARMv5 needs. On real ARMv8 hardware it is not: gnueabi is soft-float and
+  # baselines at ARMv5TE, whose SWP/SWPB atomics were *removed* in ARMv8 and
+  # survive only through the kernel's opt-in ARMV8_DEPRECATED emulation. The
+  # probe binary was built with gnueabihf, so that is the toolchain actually
+  # proven here; it is also what "armhf" has always named in this matrix, so
+  # the row is now honest about what it builds. mipsel is untouched.
   usermod-cross:
     name: build + test (unix-${{ matrix.arch }}, static)
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs_on }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - arch: armhf
-            cross_compile: arm-linux-gnueabi-
-            apt: gcc-arm-linux-gnueabi g++-arm-linux-gnueabi
-            qemu_bin: qemu-arm-static
+            runs_on: ubuntu-24.04-arm
+            cross_compile: arm-linux-gnueabihf-
+            apt: gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+            qemu_bin: ""
           - arch: mipsel
+            runs_on: ubuntu-latest
             cross_compile: mipsel-linux-gnu-
-            apt: gcc-mipsel-linux-gnu g++-mipsel-linux-gnu libc6-mipsel-cross
+            apt: gcc-mipsel-linux-gnu g++-mipsel-linux-gnu libc6-mipsel-cross qemu-user-static
             qemu_bin: qemu-mipsel-static
 
     steps:
@@ -215,17 +232,24 @@ jobs:
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
-      - name: Install the cross toolchain and qemu-user
+      - name: Install the cross toolchain
         # autoconf/libtool/libtool-bin/libltdl-dev are for MICROPY_STANDALONE=1's
         # own autotools build of lib/libffi. No libffi-dev: the point of
         # STANDALONE is to build a static libffi.a for the *target*, which the
         # host's libffi-dev cannot provide.
+        #
+        # qemu-user-static rides in matrix.apt for mipsel only -- armhf runs on
+        # the runner's own CPU now, so installing an emulator there would be
+        # dead weight that also hides a genuine failure to execute.
         run: |
           sudo apt-get update -q
           sudo apt-get install -y --no-install-recommends \
             ${{ matrix.apt }} \
-            autoconf libtool libtool-bin libltdl-dev pkg-config qemu-user-static
-          ${{ matrix.qemu_bin }} --version
+            autoconf libtool libtool-bin libltdl-dev pkg-config
+
+      - name: Check qemu-user
+        if: matrix.qemu_bin != ''
+        run: ${{ matrix.qemu_bin }} --version
 
       - name: Build mpy-cross
         run: make -C "$MPY_DIR/mpy-cross"
@@ -259,15 +283,21 @@ jobs:
             FROZEN_MANIFEST="$GITHUB_WORKSPACE/usermod/manifest.py" \
             -j"$(nproc)"
 
-      - name: Run tests under ${{ matrix.qemu_bin }}
-        # Invoked explicitly rather than relying on qemu-user-static's
-        # binfmt_misc handler, so the job does not depend on the runner
-        # image having that registration.
+      - name: Run tests
+        # RUN is empty for armhf -- the 32-bit binary executes directly on the
+        # arm64 runner, which is the whole point of the move. For mipsel it is
+        # the qemu-user binary, invoked explicitly rather than relying on
+        # qemu-user-static's binfmt_misc handler, so the job does not depend on
+        # the runner image having that registration. Unquoted on purpose: an
+        # empty RUN has to vanish from the command line, not become an empty
+        # argv[0].
         run: |
           cd tests
           BIN="$GITHUB_WORKSPACE/usermod/build/${{ matrix.arch }}/micropython"
-          ${{ matrix.qemu_bin }} "$BIN" test_wasm3.py
-          ${{ matrix.qemu_bin }} "$BIN" test_wiring_apps.py --slow
+          RUN="${{ matrix.qemu_bin }}"
+          file "$BIN"
+          $RUN "$BIN" test_wasm3.py
+          $RUN "$BIN" test_wiring_apps.py --slow
 
   # ── Windows, built and run natively on GitHub's own Windows runners ──────
   # The one target where natmod is not merely absent but impossible for a
@@ -476,62 +506,3 @@ jobs:
             usermod/build/wasm/micropython.mjs
             usermod/build/wasm/micropython.wasm
           if-no-files-found: error
-
-  # ── Probe: can a GitHub ARM64 runner execute AArch32 natively? ────────────
-  # Temporary. If it can, the armhf rows in usermod-cross (and the equivalents
-  # in micropython-bclibc and a7p) could drop qemu-user and run on real
-  # hardware instead. If it cannot, that is settled with evidence rather than
-  # by quoting a CPU datasheet.
-  probe-aarch32:
-    name: probe (AArch32 on ubuntu-24.04-arm)
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - name: What is this machine
-        run: |
-          uname -m
-          grep -m1 -E "^(model name|CPU implementer|CPU part)" /proc/cpuinfo || true
-          echo "--- CPU architecture line(s):"
-          grep -E "^CPU architecture" /proc/cpuinfo | head -2 || true
-          echo "--- kernel 32-bit compat (CONFIG_COMPAT):"
-          zgrep -E "^CONFIG_COMPAT=" /proc/config.gz 2>/dev/null || echo "  /proc/config.gz not available"
-          echo "--- personality/ELF handlers registered:"
-          ls /proc/sys/fs/binfmt_misc/ 2>/dev/null || echo "  none"
-
-      - name: Build a freestanding AArch32 binary and try to run it
-        # Third attempt at this; the first two answered nothing. A hello-world
-        # needs armhf libc headers the arm64 host does not have, and a version
-        # using `register int r7 __asm__("r7")` is rejected outright ("r7
-        # cannot be used in 'asm' here" -- it is the frame pointer). Worse,
-        # that one printed a verdict anyway: exit 127 is "file not found",
-        # since the compile had failed, not "the CPU refused".
-        #
-        # So: a bare asm block naming the registers inline,
-        # -fomit-frame-pointer to free r7, and a compile check that reports
-        # INCONCLUSIVE rather than guessing. Validated locally first --
-        # arm-linux-gnueabi-gcc builds it and it exits 0 under qemu-arm, so
-        # the binary itself is known good and the only variable left is
-        # whether this CPU will execute it.
-        run: |
-          set +e
-          sudo apt-get update -q
-          sudo apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf
-          cat > t.c <<'EOF'
-          void _start(void) {
-              __asm__ volatile("mov r0, #0\n\tmov r7, #1\n\tsvc #0");
-          }
-          EOF
-          arm-linux-gnueabihf-gcc -nostdlib -fomit-frame-pointer -static -o t32 t.c
-          if [ $? -ne 0 ] || [ ! -x ./t32 ]; then
-            echo "RESULT: INCONCLUSIVE -- could not build the test binary"
-            exit 0
-          fi
-          file t32
-          echo "--- executing directly, no qemu:"
-          ./t32
-          rc=$?
-          case $rc in
-            0)   echo "RESULT: AArch32 IS supported on this runner" ;;
-            126) echo "RESULT: AArch32 is NOT supported (exec format error)" ;;
-            *)   echo "RESULT: AArch32 did not run (exit $rc)" ;;
-          esac
-          exit 0
