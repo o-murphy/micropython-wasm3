@@ -100,10 +100,30 @@ target_include_directories(usermod_wasm3 INTERFACE
 )
 
 # Same shared knob set as the natmod build — see src/wasm3_mp_config.h.
+#
+# -Wno-error=maybe-uninitialized is for ESP-IDF, which compiles this port with
+# -Werror and a warning set gcc's interprocedural analysis does not survive on
+# wasm3's own sources:
+#
+#   In function 'v_validate_body',
+#       inlined from 'ValidateFunction' at wasm3/source/m3_validate.c:1165:9:
+#   m3_validate.c:628:17: error: 't2' may be used uninitialized
+#                                 [-Werror=maybe-uninitialized]
+#     628 |             r = v_pop_expect(v, t2, &t1);
+#   m3_validate.c:624:16: note: 't2' was declared here
+#
+# t2 is written by `v_pop(v, &t2)` two lines earlier and the code returns
+# immediately if that fails, so the warning is a false positive gcc only
+# reaches after inlining the whole validator body. It is upstream wasm3 code in
+# a submodule, not this repo's, and not something to patch downstream —
+# -Wno-error rather than -Wno-, so it still prints. Same reasoning as the two
+# -Wno- flags below, which are there for the same class of upstream-vs-strict-
+# warning-set collision.
 target_compile_options(usermod_wasm3 INTERFACE
     "-include${_MOD_DIR}/src/wasm3_mp_config.h"
     -Wno-sign-compare
     -Wno-float-conversion
+    -Wno-error=maybe-uninitialized
     -fno-fast-math
 )
 
