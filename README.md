@@ -96,15 +96,34 @@ selected by *port*, and any port with `USER_C_MODULES` is a candidate.
 | x86                | ✅    | 51/51 ✅ on the runner          |
 | armv7m             | ✅    | 49/49 ✅ under QEMU (MPS2_AN385) |
 | armv6m             | ✅    | 20/20 ✅ on rp2040py, blobs ⚠️  |
-| armv7emsp          | ✅    | —                               |
-| armv7emdp          | ✅    | —                               |
+| armv7emsp          | ✅    | 51/51 ✅ on real 32-bit ARM Linux |
+| armv7emdp          | ✅    | 51/51 ✅ on real 32-bit ARM Linux |
 | rv32imc            | ✅    | —                               |
 | rv64imc            | ✅    | —                               |
 | xtensa (ESP8266)   | ✅    | —                               |
 | xtensawin (ESP32)  | ✅    | —                               |
 
-Four of ten are executed. For the other six "it links" is the whole claim,
-and nothing has run on physical hardware yet.
+Six of ten are executed; for the other four "it links" is the whole claim.
+
+The armv7emsp/armv7emdp rows are the only ones that run on physical ARM
+hardware: `ubuntu-24.04-arm` executes AArch32 on its own CPU, so a 32-bit
+armhf build of `ports/unix` is a real ARM host that loads a Cortex-M `.mpy`
+directly. `py/persistentcode.h` allows it because `MPY_FEATURE_ARCH_TEST` is a
+*range* (`ARMV6M <= x <= ARMV7EMDP`), not an equality.
+
+armv6m and armv7m cannot join them, and the reason is worth stating because
+the failure is silent. `py/dynruntime.mk` gives those two no
+`-mfloat-abi=hard`, so their floats cross into the runtime in core registers
+while an armhf host reads them from VFP registers per AAPCS-VFP. The `.mpy`
+loads and then returns wrong numbers rather than failing — measured on
+micropython-bclibc's module, where `find_zero_angle` came back `984.252` rad
+(its range in feet) instead of `0.002502`. They keep their emulator legs,
+which run them on the target they are actually built for.
+
+None of this replaces those emulator legs. Running Cortex-M code inside a
+Linux process proves the module and its relocations are right on real ARM
+silicon; the QEMU leg proves it survives a `-nostdlib` firmware environment,
+which is a different claim entirely.
 
 ### usermod — by port
 
@@ -112,7 +131,7 @@ and nothing has run on physical hardware yet.
 | ----------------- | --------------------------------- | ------------------ |
 | `unix`            | x64, x86                          | 51/51 ✅ each      |
 | `unix`            | aarch64 (native runner)           | 51/51 ✅           |
-| `unix`            | armhf (static, real AArch32)      | pending re-run ⏳  |
+| `unix`            | armhf (static, real AArch32)      | 51/51 ✅           |
 | `unix`            | mipsel (static, qemu-user)        | 51/51 ✅           |
 | `windows`         | x64, x86 (WOW64), arm64           | 51/51 ✅ each      |
 | `webassembly`     | wasm, under node                  | 51/51 ✅           |
@@ -127,14 +146,12 @@ Ten targets across six ports. Every one of them runs the suites — there is
 no build-only row here, unlike the natmod table. Nine of the ten now run on
 real hardware; only mipsel is emulated, because GitHub has no mips runner.
 
-armhf is the one marked pending, because it has only just moved off qemu:
-`ubuntu-24.04-arm` executes 32-bit ARM directly — measured on the runner
-itself, not assumed from a datasheet — so the arm64 runner cross-builds the
-binary and then runs it on its own CPU. It passed 51/51 under qemu-user on
-every run up to now; the first run on real hardware has not reported yet.
-The move is also why that row switched from upstream's `gnueabi` to
-`gnueabihf`: soft-float armel baselines at ARMv5TE, whose SWP atomics ARMv8
-removed outright.
+armhf moved off qemu in usermod run #19 and stayed green: `ubuntu-24.04-arm`
+executes 32-bit ARM directly — measured on the runner itself, not assumed
+from a datasheet — so the arm64 runner cross-builds the binary and then runs
+it on its own CPU. The move is also why that row switched from upstream's
+`gnueabi` to `gnueabihf`: soft-float armel baselines at ARMv5TE, whose SWP
+atomics ARMv8 removed outright.
 
 The last four rows come from reading the v1.28.0 tree rather than from
 trying each: wasm3 allocates through the port's `calloc()`, `mimxrt` and

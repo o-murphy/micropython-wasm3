@@ -221,6 +221,109 @@ jobs:
         # exercises the interpreter under sustained load.
         run: cd tests && "$MPY_DIR/ports/unix/build-standard/micropython" test_wiring_apps.py --slow
 
+  # ── On real ARM silicon: armv7emsp / armv7emdp on a 32-bit ARM Linux host ─
+  # Every other ARM leg here is an emulator -- armv7m under qemu-system-arm
+  # below, armv6m under rp2040py after it. This one is not: ubuntu-24.04-arm
+  # executes AArch32 on its own CPU (measured -- see usermod.yml's
+  # usermod-cross header), so a 32-bit armhf build of ports/unix is a genuine
+  # ARM host that can load a Cortex-M natmod .mpy and run the suites against
+  # it with no emulation anywhere in the picture.
+  #
+  # Two things have to line up, and py/dynruntime.mk decides both per ARCH:
+  #
+  #   1. The .mpy arch check. py/persistentcode.h gives a Thumb-2 host with a
+  #      double-precision FPU MPY_FEATURE_ARCH = MP_NATIVE_ARCH_ARMV7EMDP, and
+  #      MPY_FEATURE_ARCH_TEST is a *range* -- ARMV6M <= x <= that -- not an
+  #      equality. Ubuntu's arm-linux-gnueabihf-gcc defaults to Thumb-2 with
+  #      __ARM_FP=12, so every ARM natmod ARCH clears this check. Read back
+  #      off the built binary rather than assumed: sys.implementation._mpy >>
+  #      10 is 8.
+  #
+  #   2. The float ABI, which that check does not cover. armv6m and armv7m
+  #      get no -mfloat-abi=hard, so their floats cross into the runtime in
+  #      core registers while an armhf host reads them from VFP registers per
+  #      AAPCS-VFP. Those .mpy files load and then misbehave rather than
+  #      failing -- measured on micropython-bclibc's own module, where
+  #      find_zero_angle returned 984.252 rad (its range in feet) instead of
+  #      0.002502. Silently wrong, never a crash. So they stay on the
+  #      emulator legs that run them on the target they are built for.
+  #
+  # armv7emsp and armv7emdp are both -mfloat-abi=hard and do line up, each
+  # against a host built with its own MICROPY_FLOAT_IMPL -- that decides
+  # sizeof(mp_float_t) on both sides of the dynruntime call boundary. Both
+  # legs were run locally before this job existed: 20/20 then 31/31 on each,
+  # CoreMark 94.041 (dp) and 94.738 (sp).
+  #
+  # Scope: this runs Cortex-M code inside a Linux process. It proves the
+  # native module and its relocations are right on real ARM silicon. It does
+  # not replace the QEMU leg, which exercises a -nostdlib firmware
+  # environment this module has its own libc/math shims for.
+  test-arm-linux:
+    name: test (${{ matrix.arch }} / 32-bit ARM Linux)
+    needs: build
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: armv7emsp
+            # dynruntime.mk gives armv7emsp MICROPY_FLOAT_IMPL=float; the unix
+            # port defaults to double. mpconfigvariant_common.h guards that
+            # default with #ifndef, so a -D on the command line wins. Checked
+            # on the resulting binary, not inferred from the flag: print(1/3)
+            # gives 0.33333334 rather than 0.3333333333333333.
+            host_float: "-DMICROPY_FLOAT_IMPL=MICROPY_FLOAT_IMPL_FLOAT"
+          - arch: armv7emdp
+            # Already double, which is the unix port's own default.
+            host_float: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/fetch-micropython
+        with:
+          mpy_tag: ${{ env.MPY_TAG }}
+
+      - name: Install the armhf cross toolchain
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+
+      - name: Build a 32-bit ARM micropython host
+        # MICROPY_PY_FFI=0/MICROPY_PY_BTREE=0: both want target libraries the
+        # cross toolchain does not ship (armhf libffi headers in particular),
+        # and neither suite touches either module. This host exists only to
+        # load a natmod .mpy. usermod.yml's armhf row is where a
+        # full-featured static armhf build is actually exercised.
+        run: |
+          make -C "$MPY_DIR/ports/unix" VARIANT=standard \
+            BUILD="$GITHUB_WORKSPACE/mpy-host-${{ matrix.arch }}" \
+            CROSS_COMPILE=arm-linux-gnueabihf- \
+            MICROPY_PY_FFI=0 MICROPY_PY_BTREE=0 \
+            CFLAGS_EXTRA="${{ matrix.host_float }}" -j"$(nproc)"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm3-${{ matrix.arch }}
+          path: natmod/build/${{ matrix.arch }}/
+
+      - name: Run tests
+        # `file` and the two probes first, so the log carries the evidence
+        # rather than this job's comment having to be taken on faith: a
+        # 32-bit ARM binary, the arch it advertises to the .mpy loader, and
+        # the float width it was built with.
+        run: |
+          HOST="$GITHUB_WORKSPACE/mpy-host-${{ matrix.arch }}/micropython"
+          file "$HOST"
+          "$HOST" -c "import sys; print('MPY_FEATURE_ARCH', sys.implementation._mpy >> 10)"
+          "$HOST" -c "print('float width probe', 1/3)"
+          ln -sf ../natmod/build/${{ matrix.arch }}/wasm3.mpy tests/wasm3.mpy
+          cd tests
+          "$HOST" test_wasm3.py
+          "$HOST" test_wiring_apps.py --slow
+
   # ── On-target: armv7m under QEMU (Cortex-M3) ─────────────────────────────
   # The first leg that runs the module as something other than x86. natmod/ci/
   # run_qemu.py pushes wasm3.mpy and every .wasm blob over the raw REPL, since
