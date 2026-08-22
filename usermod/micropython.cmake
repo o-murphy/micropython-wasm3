@@ -12,6 +12,13 @@
 #       USER_C_MODULES=/abs/path/to/usermod/micropython.cmake \
 #       FROZEN_MANIFEST=/abs/path/to/usermod/manifest.py
 
+# NOTE: wasm3 allocates through the port's own libc (calloc/free/realloc), not
+# the MicroPython GC heap — routing it at the GC heap would need the slot table
+# registered with MP_REGISTER_ROOT_POINTER, since a usermod's globals live in
+# firmware .bss that gc_collect() does not scan. So the port must actually have
+# a C heap. rp2 defaults MICROPY_C_HEAP_SIZE to 0, which makes every wasm3
+# allocation fail and faults the CPU inside wasm3.Module(); configure with
+# -DMICROPY_C_HEAP_SIZE=131072 (or more, sized to the modules you load).
 cmake_minimum_required(VERSION 3.13)
 
 get_filename_component(_USERMOD_DIR "${CMAKE_CURRENT_LIST_FILE}" DIRECTORY)

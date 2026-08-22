@@ -40,9 +40,23 @@ int errno;
  * through these. Routing them at the MicroPython GC heap is what makes the
  * memory show up in gc.mem_free() and get reclaimed on soft reset.
  */
+/* m_realloc_maybe rather than m_malloc/m_realloc throughout: dynruntime's
+ * m_malloc() funnels through m_realloc_checked_dyn(), which calls
+ * m_malloc_fail() on exhaustion and raises MemoryError through nlr
+ * (py/dynruntime.h:83-93). That longjmps out of whatever wasm3 frame happened
+ * to be allocating, past its own cleanup. wasm3 is written to handle a NULL
+ * return instead — every caller checks, and it surfaces as m3Err_mallocFailed
+ * — so returning NULL is both safer and more informative.
+ *
+ * No size header here, unlike the usermod path in m3_core_mp.c: dynruntime's
+ * m_free() takes a pointer alone, so there is nothing to remember. */
 void *calloc(size_t num, size_t size) {
-    /* m_malloc returns GC-cleared memory, so no explicit memset. */
-    return m_malloc(num * size);
+    size_t bytes = num * size;
+    if (size != 0 && bytes / size != num) {
+        return NULL;   /* overflow */
+    }
+    /* GC memory comes back cleared, which is what calloc promises. */
+    return m_realloc_maybe(NULL, bytes, false);
 }
 
 void free(void *ptr) {
@@ -50,7 +64,9 @@ void free(void *ptr) {
 }
 
 void *realloc(void *ptr, size_t new_size) {
-    return m_realloc(ptr, new_size);
+    /* Returns NULL and leaves the old block intact on failure, which is the
+     * contract m3_Realloc_Impl() is written against. */
+    return m_realloc_maybe(ptr, new_size, true);
 }
 
 /* ── Memory / string ──────────────────────────────────────────────────────

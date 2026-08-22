@@ -45,6 +45,27 @@ build, `tests/`, `tools/`, `benchmarks/`).
   cross-checks that `tools/make_test_wasm.py` reproduces `simple.wasm`
   byte-for-byte.
 
+### Fixed
+
+Found by loading a real-world module — a C++ build of `bclibc` compiled to
+wasm by Emscripten at `-O3`, 249 KB with 51 imports — which is far outside
+what the hand-written fixtures exercise:
+
+- `src/libc_shim.c`'s `calloc`/`realloc` went through dynruntime's
+  `m_malloc`/`m_realloc`, which call `m_malloc_fail()` on exhaustion and
+  raise `MemoryError` through nlr (`py/dynruntime.h:83-93`) — longjmping out
+  of whichever wasm3 frame was allocating, past its own cleanup. wasm3 checks
+  every allocation for NULL and reports `m3Err_mallocFailed`, so both now use
+  `m_realloc_maybe`. `calloc` also gained the `num * size` overflow check it
+  never had.
+- `WASM3_MP_MAX_ARGS` was 8. Emscripten output routinely exceeds that (one of
+  bclibc's exception trampolines takes 23 parameters), so it is 16 now, sized
+  against a Cortex-M0+'s 8 KB stack rather than taste.
+- `d_m3MaxLinearMemoryPages` stays at 16 for devices but is raised to 1024 for
+  x64/x86 in `natmod/Makefile`: a module compiled for the web declares
+  whatever its toolchain chose, and the bclibc build wants 258 pages (16.1 MB)
+  before it runs at all.
+
 ### Verified
 
 Against MicroPython v1.28.0 (the version CI pins) and, with identical

@@ -38,6 +38,14 @@
 /* Cap linear memory growth. Stock default is the wasm spec maximum (65536
  * pages = 4 GiB), which is meaningless here: memory comes from the GC heap.
  * 16 pages = 1 MiB is already more than most MCU targets can give.
+ *
+ * This is the wrong number for a host build, and natmod/Makefile raises it
+ * for x64/x86 accordingly: a module compiled for the web asks for whatever
+ * its toolchain chose, with no regard for this project's budget — an
+ * Emscripten C++ build measured here declares an initial 258 pages (16.1 MB)
+ * before a line of it runs. On a host that is unremarkable; on an MCU it is
+ * simply out of reach, and the cap is what turns it into a refusal at load
+ * rather than a failed allocation somewhere later.
  */
 #ifndef d_m3MaxLinearMemoryPages
 #define d_m3MaxLinearMemoryPages        16

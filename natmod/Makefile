@@ -83,6 +83,16 @@ endif
 
 SRC = wasm3_mp.c libc_shim.c math_shim.c wasm3.py $(WASM3_SRC) $(_SQRT_SRCS)
 
+# ── Host archs: lift the MCU-sized linear-memory cap ──────────────────────────
+# src/wasm3_mp_config.h caps linear memory at 16 pages, which is right for a
+# device and wrong for x64/x86: real .wasm modules declare whatever their
+# toolchain picked (an Emscripten C++ build measured here wants 258 pages).
+# The host has the RAM, so let it load them; note the interpreter still obeys
+# the module's own declared maximum.
+ifeq ($(ARCH),$(filter $(ARCH),x64 x86))
+CFLAGS_EXTRA += -Dd_m3MaxLinearMemoryPages=1024
+endif
+
 # ── x86: force SSE2 ───────────────────────────────────────────────────────────
 # Two reasons, and the second one is not optional for a wasm runtime.
 #

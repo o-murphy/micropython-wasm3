@@ -207,6 +207,20 @@ Known limitations:
 - `m3_CallArgv` is unavailable: it parses string arguments with
   `strtoul`/`strtod`, which `src/libc_shim.c` deliberately stubs out. Use the
   typed `wasm3.call()` path instead.
+- **No access to the indirect function table.** `m3_GetTableFunction()` is not
+  bound, so a host import cannot dispatch through the table. That is what
+  blocks Emscripten C++ modules built with `-fexceptions`: their `invoke_*`
+  imports exist precisely to call a table entry and catch what it throws, and
+  a stub returning 0 traps with `[trap] uninitialized element` the moment
+  `__wasm_call_ctors` runs. Modules whose entry points do not go through the
+  table work regardless — a C++ build of bclibc loads here, all 51 imports
+  link, and `_BCLIBCFFI_get_version()` returns its string out of linear
+  memory; anything needing constructors does not.
+- **A usermod needs the port to have a C heap.** wasm3 allocates through the
+  port's own `calloc`, and some ports default that to nothing: on rp2,
+  `MICROPY_C_HEAP_SIZE` is `0`, so `wasm3.Module()` faults the CPU rather
+  than raising. Build with e.g. `-DMICROPY_C_HEAP_SIZE=131072`. A natmod is
+  unaffected — `src/libc_shim.c` routes it at the GC heap instead.
 - Globals, WASI and the reference-types/table APIs are not exposed yet.
 
 ---

@@ -245,8 +245,15 @@ static MP_DEFINE_CONST_FUN_OBJ_2(mp_wasm3_find_obj, mp_wasm3_find);
 
 /* ── call(handle, fn, *args) ──────────────────────────────────────────── */
 
+/* Bound on a single call's arguments and results, in both directions. Sized
+ * from real modules rather than taste: Emscripten output routinely has
+ * imports past 8 parameters (a C++ build of bclibc reaches 23 on one of its
+ * exception trampolines), while the arrays below are C-stack locals, and on
+ * a Cortex-M0+ the whole stack is 8 KB. 16 covers ordinary signatures at
+ * ~512 bytes of worst-case frame; anything beyond it fails loudly rather
+ * than silently truncating. */
 #ifndef WASM3_MP_MAX_ARGS
-#define WASM3_MP_MAX_ARGS 8
+#define WASM3_MP_MAX_ARGS 16
 #endif
 
 static mp_obj_t mp_wasm3_call(size_t n_args, const mp_obj_t *args) {
