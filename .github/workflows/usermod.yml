@@ -360,43 +360,22 @@ jobs:
           tar xf mpy.tar.xz && rm mpy.tar.xz
           echo "MPY_DIR=$(pwd)/micropython-${VER}" >> "$GITHUB_ENV"
 
-      - name: Build mpy-cross
-        # STRIP=""/SIZE="true" on every arch, not just the one that needs
-        # them. py/mkenv.mk defines STRIP/SIZE as $(CROSS_COMPILE)strip and
-        # -size unconditionally, and CLANGARM64's gcc-compat package ships
-        # neither. STRIP="" works because py/mkrules.mk guards that step with
-        # `ifdef STRIP` and Make treats an empty value as undefined; SIZE has
-        # no such guard, so it needs a real no-op binary rather than "".
-        #
-        # LDFLAGS_ARCH: mpy-cross/Makefile hardcodes `--cref` for every
-        # non-Darwin host. Fine for GNU ld, but CLANGARM64 links through
-        # clang+lld, which rejects it outright. The map file's cross-
-        # reference table is diagnostic only.
-        #
-        # COMPILER_TARGET: mpy-cross/Makefile decides whether to compile
-        # ports/windows/fmode.c by grepping `$(CC) -dumpmachine` for
-        # "mingw". Real mingw-w64 gcc reports x86_64-w64-mingw32 and matches;
-        # CLANGARM64's wrapper is clang underneath and does not, so fmode.c
-        # is silently dropped and the link fails on set_fmode_binary. Forcing
-        # a value containing "mingw" is correct for all three environments.
-        run: |
-          make -C "$MPY_DIR/mpy-cross" \
-            LDFLAGS_ARCH="-Wl,--gc-sections" COMPILER_TARGET="mingw-forced" \
-            STRIP="" SIZE="true" -j"$(nproc)"
-
       - name: Build usermod firmware (windows-${{ matrix.arch }})
         # CROSS_COMPILE is left empty deliberately: inside an MSYS2
         # environment the toolchain is already the target's, under unprefixed
         # names. That also makes WINDRES (py/mkenv.mk: $(CROSS_COMPILE)windres)
         # resolve to plain `windres`, which gcc-compat does provide — the
         # prefixed aarch64-w64-mingw32-windres is what does not exist.
-        run: |
-          make -C "$MPY_DIR/ports/windows" \
-            BUILD=build-wasm3 PROG=micropython-wasm3.exe \
-            STRIP="" SIZE="true" CFLAGS_EXTRA="${{ matrix.cflags_extra }}" \
-            USER_C_MODULES="$(pwd)" \
-            FROZEN_MANIFEST="$(pwd)/usermod/manifest.py" \
-            -j"$(nproc)"
+        #
+        # mpy-cross + main build (the four CLANGARM64 overrides included)
+        # now come from the shared action -- build_dir/extra_make_args
+        # preserve the same build-wasm3/PROG=micropython-wasm3.exe this
+        # job has always used, so Run tests below needs no changes.
+        uses: ballistics-lab/micropython-native-ci/.github/actions/build-usermod-windows-arch@claude/usermod-shared-action-kwulzv
+        with:
+          build_dir: build-wasm3
+          cflags_extra: ${{ matrix.cflags_extra }}
+          extra_make_args: PROG=micropython-wasm3.exe
 
       - name: Run tests
         # Natively, on the box that built it — no emulation anywhere.

@@ -120,6 +120,14 @@ natmod ARCHes to six.
 
 ### Changed
 
+- CI: `usermod.yml`'s unix rows (`x64`/`x86`/`aarch64`), `usermod-cross`
+  (`armhf`/`mipsel`), and `usermod-windows` (`x64`/`x86`/`arm64`) no longer
+  carry their own apt/cross-compile/deplibs/MSYS2 recipe inline — all three
+  now call `build-usermod-unix-arch`/`build-usermod-windows-arch` from
+  [`ballistics-lab/micropython-native-ci`](https://github.com/ballistics-lab/micropython-native-ci),
+  the same repo `natmod.yml` already used for `build-natmod-arch`. No
+  behavior change: `BUILD=build-wasm3`, `PROG=micropython-wasm3(.exe)`, and
+  every other build path stay exactly what they were.
 - The `usermod` `armhf` row runs on `ubuntu-24.04-arm` instead of under
   `qemu-user`. A GitHub arm64 runner executes 32-bit ARM on its own CPU —
   measured on the runner with a freestanding AArch32 binary, not assumed from
