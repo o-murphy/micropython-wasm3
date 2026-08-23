@@ -81,6 +81,70 @@ what the hand-written fixtures exercise:
 so a natmod cannot reach that architecture at all, and usermod is the only
 way this module runs on ARM64.
 
+### Added
+
+CI coverage grew from four usermod targets to eleven, and from four executed
+natmod ARCHes to six.
+
+- `usermod.yml` is its own workflow, split out of `natmod.yml`: the two
+  halves share no artifacts, have different trigger paths and fail in
+  different ways (a usermod links against the port's own libc, a natmod
+  against `src/libc_shim.c`), so one red X standing for both was hiding
+  which.
+- `usermod` on **Windows** `x64`/`x86`/`arm64`, built *and run* natively via
+  MSYS2 (MINGW64/MINGW32/CLANGARM64). natmod is not merely absent there but
+  impossible: `ports/windows/mpconfigport.h` sets `MICROPY_EMIT_X64 (0)` and
+  `py/persistentcode.c` gates `.mpy` native-code loading on
+  `MICROPY_EMIT_MACHINE_CODE`, so no `wasm3.mpy` can load whatever its arch.
+  The `arm64` row carries `-Wno-error` for MicroPython's *own* sources, which
+  do not survive `ports/windows`' gcc-tuned `-Werror` under clang; the
+  x64/x86 rows keep it, so nothing of this module's goes unchecked.
+- `usermod` on **webassembly**, under node — needed no module changes at all.
+  A genuinely distinct portability datapoint: 32-bit target, a libc that is
+  neither glibc nor newlib, and no filesystem whatsoever. `natmod/ci/run_wasm.py`
+  and a `_ARGV` hook in `tests/test_wiring_apps.py` carry the blobs and the
+  `--slow` flag in, since the port gives the interpreter neither files nor argv.
+- `usermod` on **`unix` `armhf`/`mipsel`**, statically linked. `mipsel` runs
+  under `qemu-user`; `armhf` runs on real hardware (below).
+- `usermod` on **esp32** (`BOARD=ESP32_GENERIC`, ESP-IDF v5.5.1),
+  **build-only** — there is no esp32 emulator to hand a firmware image to the
+  way rp2040py takes a `.uf2`. README used to call this target unbuildable;
+  that was a claim about this project's development environment, where
+  `dl.espressif.com` is refused by egress policy, not about the target.
+- `natmod` **executes** `armv7emsp` and `armv7emdp` now, not just builds
+  them, on a statically linked 32-bit armhf `ports/unix` host on
+  `ubuntu-24.04-arm` — real ARM silicon, no emulator anywhere.
+  `py/persistentcode.h`'s `MPY_FEATURE_ARCH_TEST` is a range
+  (`ARMV6M <= x <= ARMV7EMDP`), not an equality, which is what lets a
+  Cortex-M `.mpy` load on such a host.
+
+### Changed
+
+- The `usermod` `armhf` row runs on `ubuntu-24.04-arm` instead of under
+  `qemu-user`. A GitHub arm64 runner executes 32-bit ARM on its own CPU —
+  measured on the runner with a freestanding AArch32 binary, not assumed from
+  a datasheet — so the arm64 runner cross-builds and then runs it natively.
+  That is also why the row switched from upstream's soft-float `gnueabi` to
+  `gnueabihf`: `armel` baselines at ARMv5TE, whose SWP atomics ARMv8 removed
+  outright. `mipsel` stays emulated; GitHub has no mips runner.
+- `usermod/micropython.cmake` gained `-Wno-error=maybe-uninitialized`.
+  ESP-IDF is the only port here that compiles wasm3's own sources with
+  `-Werror` and that warning on, and gcc reaches a false positive on
+  `m3_validate.c:628` only after inlining the whole validator body. Upstream
+  submodule code, so `-Wno-error` rather than a downstream patch — and
+  `-Wno-error=` rather than `-Wno-`, so it still prints.
+
+### Fixed
+
+- `src/wasm3_mp.c`'s `f32`/`f64` returns went through an implicit conversion
+  that clang rejects under `-Wdouble-promotion -Werror` (a promotion for
+  `f32`, a *narrowing* for `f64` wherever `MICROPY_FLOAT_IMPL_FLOAT` is
+  selected). Both now go through one `WASM3_FLOAT` macro defined per build
+  mode — identity under natmod, whose `mp_obj_new_float` already bakes in a
+  `(double)`, and `(mp_float_t)` under usermod. The natmod branch matters:
+  `py/dynruntime.mk` selects `MICROPY_FLOAT_IMPL=none` for `xtensa`,
+  `rv32imc` and `rv64imc`, where `mp_float_t` does not exist at all.
+
 ### Verified
 
 Against MicroPython v1.28.0 (the version CI pins) and, with identical
@@ -102,9 +166,19 @@ results, against current `master` (v1.29.0-preview):
 
 ### Not yet done
 
-- All ten arches build in CI; four are executed (x64, x86, armv7m under QEMU,
-  armv6m on rp2040py). Nothing has run on physical hardware, and for the
-  remaining five cross targets "it links" is the entire claim.
+- All ten arches build in CI; six are executed (x64, x86, armv7m under QEMU,
+  armv6m on rp2040py, and armv7emsp/armv7emdp on a real 32-bit ARM Linux
+  host). For the remaining four — `rv32imc`, `rv64imc`, `xtensa`, `xtensawin`
+  — "it links" is the entire claim. `armv6m` and `armv7m` cannot join the ARM
+  Linux host: `py/dynruntime.mk` builds them soft-float, so their floats
+  reach the runtime in core registers while an armhf host reads them from VFP
+  registers per AAPCS-VFP, and the `.mpy` loads and then returns wrong values
+  rather than failing.
+- On the usermod side, `mipsel` is the only remaining emulated target, and
+  `esp32` the only one with no execution step at all. `ports/qemu` is still
+  out: it links `-nostdlib` with libgcc alone, and this module's shims would
+  link and then corrupt, since they allocate on the GC heap while a usermod's
+  globals sit in firmware `.bss` that `gc_collect()` does not scan.
 - On armv6m only the core suite passes. The blob suite is blocked by native
   stack depth, not by RAM — each blob loads with 40–65 KB of heap to spare
   and then fails on call depth. Relocating the stack into the heap's region
