@@ -93,19 +93,6 @@ jobs:
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
-      - name: Install unix build deps
-        if: matrix.port == 'unix' && matrix.arch_label != 'x86'
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y libffi-dev pkg-config
-
-      - name: Install 32-bit build deps
-        if: matrix.arch_label == 'x86'
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update -q
-          sudo apt-get install -y gcc-multilib libffi-dev:i386 pkg-config
-
       - name: Install the ARM toolchain and emulator
         if: matrix.port == 'rp2'
         # libstdc++-arm-none-eabi-newlib: pico-sdk compiles one .cpp of its
@@ -119,7 +106,10 @@ jobs:
 
       - name: Build mpy-cross
         # Explicitly, before FROZEN_MANIFEST ever appears on a command line --
-        # py/mkenv.mk's auto-build rule for it races under -j.
+        # py/mkenv.mk's auto-build rule for it races under -j. Unix rows no
+        # longer need this here at all: build-usermod-unix-arch below builds
+        # it as part of the same fix.
+        if: matrix.port == 'rp2'
         run: make -C "$MPY_DIR/mpy-cross"
 
       # No `make submodules` step: MPY_DIR is the official release tarball,
@@ -129,13 +119,19 @@ jobs:
       # "can be skipped if you didn't clone the MicroPython source from git".
       - name: Build usermod firmware (unix)
         if: matrix.port == 'unix'
-        run: |
-          make -C "$MPY_DIR/ports/unix" VARIANT=standard \
-            BUILD=build-wasm3 PROG=micropython-wasm3 \
-            MICROPY_FORCE_32BIT=${{ matrix.force_32bit || '0' }} \
-            USER_C_MODULES="$GITHUB_WORKSPACE" \
-            FROZEN_MANIFEST="$GITHUB_WORKSPACE/usermod/manifest.py" \
-            -j"$(nproc)"
+        # PROG/BUILD/force-32bit dispatch, previously the "Install unix build
+        # deps" / "Install 32-bit build deps" steps plus the literal
+        # BUILD=build-wasm3 PROG=micropython-wasm3 here, now lives inside the
+        # action -- build_dir pinned to the same relative "build-wasm3" (it
+        # resolves against $MPY_DIR/ports/unix the same way a bare BUILD=
+        # value on the command line always did) so Run tests below needs no
+        # change, and PROG rides extra_make_args since the action has no
+        # dedicated input for it.
+        uses: ballistics-lab/micropython-native-ci/.github/actions/build-usermod-unix-arch@claude/usermod-shared-action-kwulzv
+        with:
+          arch: ${{ matrix.arch_label }}
+          build_dir: build-wasm3
+          extra_make_args: PROG=micropython-wasm3
 
       - name: Build usermod firmware (rp2)
         if: matrix.port == 'rp2'
@@ -232,56 +228,18 @@ jobs:
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
-      - name: Install the cross toolchain
-        # autoconf/libtool/libtool-bin/libltdl-dev are for MICROPY_STANDALONE=1's
-        # own autotools build of lib/libffi. No libffi-dev: the point of
-        # STANDALONE is to build a static libffi.a for the *target*, which the
-        # host's libffi-dev cannot provide.
-        #
-        # qemu-user-static rides in matrix.apt for mipsel only -- armhf runs on
-        # the runner's own CPU now, so installing an emulator there would be
-        # dead weight that also hides a genuine failure to execute.
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y --no-install-recommends \
-            ${{ matrix.apt }} \
-            autoconf libtool libtool-bin libltdl-dev pkg-config
-
-      - name: Check qemu-user
-        if: matrix.qemu_bin != ''
-        run: ${{ matrix.qemu_bin }} --version
-
-      - name: Build mpy-cross
-        run: make -C "$MPY_DIR/mpy-cross"
-
-      - name: Build libffi for ${{ matrix.arch }}
-        # MICROPY_STANDALONE=1 makes libffi a DEPLIBS entry, not a prerequisite
-        # of the default target, so `deplibs` has to run as its own pass. BUILD
-        # must match the next step's: deplibs writes libffi.a under
-        # $(BUILD)/lib/libffi/out/lib and the main build looks for it there.
-        #
-        # BUILD stays a shell local rather than job env — py/mkenv.mk has
-        # `BUILD ?= build`, so an inherited BUILD would also reroot the
-        # mpy-cross build above.
-        run: |
-          BUILD="$GITHUB_WORKSPACE/usermod/build/${{ matrix.arch }}"
-          make -C "$MPY_DIR/ports/unix" VARIANT=standard \
-            BUILD="$BUILD" CROSS_COMPILE=${{ matrix.cross_compile }} \
-            MICROPY_STANDALONE=1 deplibs
-
       - name: Build usermod firmware (${{ matrix.arch }}, static)
         # -static is a deployability requirement, not a CI convenience: these
         # targets are minimal embedded Linux boards that cannot be assumed to
         # have a matching ld.so/libc. Same reasoning as
-        # micropython/micropython#17456.
-        run: |
-          BUILD="$GITHUB_WORKSPACE/usermod/build/${{ matrix.arch }}"
-          make -C "$MPY_DIR/ports/unix" VARIANT=standard \
-            BUILD="$BUILD" CROSS_COMPILE=${{ matrix.cross_compile }} \
-            MICROPY_STANDALONE=1 LDFLAGS_EXTRA="-static" \
-            USER_C_MODULES="$GITHUB_WORKSPACE" \
-            FROZEN_MANIFEST="$GITHUB_WORKSPACE/usermod/manifest.py" \
-            -j"$(nproc)"
+        # micropython/micropython#17456. Toolchain/qemu install, mpy-cross,
+        # deplibs and the main build all now come from the action -- arch
+        # alone drives every one of those (armhf/mipsel both link static
+        # there), so no overrides needed; build_dir defaults to exactly
+        # usermod/build/<arch>, matching what Run tests below already expects.
+        uses: ballistics-lab/micropython-native-ci/.github/actions/build-usermod-unix-arch@claude/usermod-shared-action-kwulzv
+        with:
+          arch: ${{ matrix.arch }}
 
       - name: Run tests
         # RUN is empty for armhf -- the 32-bit binary executes directly on the
