@@ -64,11 +64,11 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@main
+      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.1.0
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
-      - uses: ballistics-lab/micropython-native-ci/.github/actions/build-natmod-arch@main
+      - uses: ballistics-lab/micropython-native-ci/.github/actions/build-natmod-arch@v0.1.0
         with:
           arch: ${{ matrix.arch }}
 
@@ -103,7 +103,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@main
+      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.1.0
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -217,7 +217,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@main
+      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.1.0
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -301,7 +301,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@main
+      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.1.0
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -352,7 +352,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@main
+      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.1.0
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
