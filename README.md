@@ -261,14 +261,14 @@ allocates through the port's `calloc()`, and few ports have a C heap:
   way rp2040py takes an RP2040 `.uf2`.
 
   It used to say "cannot be built" here, and that was a claim about one
-  machine rather than about the target. `dl.espressif.com` and
-  `components-file.espressif.com` are both refused by this project's
+  machine rather than about the target: `dl.espressif.com` and
+  `components-file.espressif.com` were both refused by this project's
   development environment, and `espressif/mdns` and `espressif/lan867x` are
   real dependencies of the port for target esp32, vendored in neither the
-  release tarball nor esp-idf itself — so it could not be checked locally
-  before pushing, which is this repo's usual bar. On a GitHub runner none of
-  that applies: esp-idf's own `install.sh` runs there green in
-  micropython-bclibc's natmod xtensawin leg.
+  release tarball nor esp-idf itself. So this job went in CI-first, below this
+  repo's usual bar of reproducing a build locally before pushing. Both hosts
+  have since been allowed, so that caveat no longer applies to further work
+  here.
 
   I expected the port's flash and IRAM budget to be what stopped this, since
   wasm3 is an interpreter rather than a leaf module and a usermod goes into
