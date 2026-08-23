@@ -137,7 +137,7 @@ which is a different claim entirely.
 | `webassembly`     | wasm, under node                  | 51/51 ✅           |
 | `rp2`             | `RPI_PICO`, on rp2040py           | 20/20 ✅           |
 | `qemu`            | armv7m                            | blocked, see below |
-| `esp32`           | `ESP32_GENERIC`, build-only       | builds ⏳, see below |
+| `esp32`           | `ESP32_GENERIC`, build-only       | builds ✅, see below |
 | `esp8266`         | —                                 | unsafe, see below  |
 | `stm32`, `samd`, `nrf`, `alif`, `zephyr`, `cc3200` | — | no C heap |
 | `mimxrt`, `renesas-ra` | —                            | plausible, untried |
@@ -270,10 +270,14 @@ allocates through the port's `calloc()`, and few ports have a C heap:
   that applies: esp-idf's own `install.sh` runs there green in
   micropython-bclibc's natmod xtensawin leg.
 
-  The genuinely open question is size, not portability. wasm3 is an
-  interpreter rather than a leaf module, and a usermod goes into the firmware
-  image — so this is the first target where the port's flash and IRAM budget
-  is a real constraint on it. A red result is informative either way.
+  I expected the port's flash and IRAM budget to be what stopped this, since
+  wasm3 is an interpreter rather than a leaf module and a usermod goes into
+  the firmware image. It was not — the build never got that far. What stopped
+  it was `-Werror=maybe-uninitialized` firing on upstream wasm3's own
+  `m3_validate.c:628`, a false positive gcc only reaches after inlining the
+  whole validator body, and one that only ESP-IDF's warning set turns fatal
+  (the `xtensawin` natmod compiles the same sources green). See
+  `usermod/micropython.cmake` for the one `-Wno-error=` that settles it.
 - **`ports/esp8266`** — worse than uncovered: it would build and then be
   silently wrong. `ports/esp8266/posix_helpers.c:35` implements `malloc` as
   `gc_alloc`, and a usermod's globals live in firmware `.bss`, which
