@@ -1,0 +1,6 @@
+[submodule "wasm3"]
+	path = wasm3
+	url = https://github.com/wasm3/wasm3
+[submodule "wasm2mpy"]
+	path = wasm2mpy
+	url = https://github.com/vshymanskyy/wasm2mpy
