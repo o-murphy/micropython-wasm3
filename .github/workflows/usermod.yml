@@ -93,24 +93,12 @@ jobs:
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
-      - name: Install the ARM toolchain and emulator
+      - name: Install the rp2040py emulator
         if: matrix.port == 'rp2'
-        # libstdc++-arm-none-eabi-newlib: pico-sdk compiles one .cpp of its
-        # own, which fails with "cstdlib: No such file or directory" without it.
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y --no-install-recommends \
-            gcc-arm-none-eabi libnewlib-arm-none-eabi \
-            libstdc++-arm-none-eabi-newlib cmake
-          pip install "rp2040py==0.3.1" littlefs-python
-
-      - name: Build mpy-cross
-        # Explicitly, before FROZEN_MANIFEST ever appears on a command line --
-        # py/mkenv.mk's auto-build rule for it races under -j. Unix rows no
-        # longer need this here at all: build-usermod-unix below builds
-        # it as part of the same fix.
-        if: matrix.port == 'rp2'
-        run: make -C "$MPY_DIR/mpy-cross"
+        # The arm-none-eabi + CMake toolchain itself now lives inside
+        # build-usermod-rp2040 below -- only the emulator, which the action
+        # has no reason to know about, stays here.
+        run: pip install "rp2040py==0.3.1" littlefs-python
 
       # No `make submodules` step: MPY_DIR is the official release tarball,
       # which already ships lib/mbedtls, lib/berkeley-db-1.xx and
@@ -135,25 +123,18 @@ jobs:
 
       - name: Build usermod firmware (rp2)
         if: matrix.port == 'rp2'
-        # Two steps rather than one: ports/rp2/Makefile builds its cmake
-        # arguments with `CMAKE_ARGS +=`, so passing CMAKE_ARGS= on the command
-        # line replaces the lot -- including MICROPY_BOARD, USER_C_MODULES and
-        # MICROPY_FROZEN_MANIFEST. Configure normally, then add the one extra
-        # define to the existing cache.
-        #
-        # MICROPY_C_HEAP_SIZE is not optional here: rp2 defaults it to 0, and
-        # wasm3 allocates through the port's calloc(). usermod/micropython.cmake
-        # fails the configure outright if it is left at 0.
-        run: |
-          cd "$MPY_DIR/ports/rp2"
-          make BOARD=RPI_PICO BUILD=build-wasm3 \
-            USER_C_MODULES="$GITHUB_WORKSPACE/usermod/micropython.cmake" \
-            FROZEN_MANIFEST="$GITHUB_WORKSPACE/usermod/manifest.py" || true
-          cmake -S . -B build-wasm3 -DMICROPY_C_HEAP_SIZE=131072
-          make BOARD=RPI_PICO BUILD=build-wasm3 \
-            USER_C_MODULES="$GITHUB_WORKSPACE/usermod/micropython.cmake" \
-            FROZEN_MANIFEST="$GITHUB_WORKSPACE/usermod/manifest.py" \
-            -j"$(nproc)"
+        # extra_cmake_args, not a plain make arg: MICROPY_C_HEAP_SIZE is not
+        # optional here -- rp2 defaults it to 0, and wasm3 allocates through
+        # the port's calloc(), so usermod/micropython.cmake fails the
+        # configure outright if it is left at 0. This is exactly the case
+        # build-usermod-rp2040's extra_cmake_args was generalized for (see
+        # its own header): ports/rp2/Makefile builds its cmake arguments
+        # with CMAKE_ARGS +=, so this define can't just ride the make
+        # command line without replacing the whole accumulated set.
+        uses: ballistics-lab/micropython-native-ci/.github/actions/build-usermod-rp2040@claude/usermod-shared-action-kwulzv
+        with:
+          build_dir: build-wasm3
+          extra_cmake_args: -DMICROPY_C_HEAP_SIZE=131072
 
       - name: Run tests (unix)
         if: matrix.port == 'unix'

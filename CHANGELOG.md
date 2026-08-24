@@ -167,6 +167,16 @@ natmod ARCHes to six.
   step (see Fixed, above) stays caller-side, as the action's own contract
   requires. No behavior change: `VARIANT=pyscript`, `emsdk latest`, and every
   build path stay exactly what they were.
+- CI: the `usermod` `rp2` row's toolchain-install/mpy-cross/port-build
+  steps are now `build-usermod-rp2040` from the same
+  `ballistics-lab/micropython-native-ci` repo. `extra_cmake_args:
+  -DMICROPY_C_HEAP_SIZE=131072` replaces the row's own two-step
+  configure-then-reconfigure dance — that input was added to the action
+  specifically for this case (`ports/rp2/Makefile` builds its `CMAKE_ARGS`
+  with `+=`, so this define can't ride the plain `make` command line
+  without replacing the whole accumulated set). Only the `pip install
+  rp2040py littlefs-python` step stays here; the arm-none-eabi + CMake
+  toolchain now lives inside the action.
 
 ### Fixed
 
