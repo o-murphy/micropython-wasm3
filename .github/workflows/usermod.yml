@@ -94,10 +94,8 @@ jobs:
       # build-usermod-*) now live in cibuildmp's own repo, same paths and
       # names as before -- cibuildmp the CLI/tool still only drives natmod
       # (usermod is unimplemented there, see its own docs/BACKLOG.md), but
-      # the action *repo* hosts both. Pinned to the same commit natmod.yml
-      # pins ballistics-lab/cibuildmp@ to, for the same reason: no released
-      # tag exists past M3 yet.
-      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@345db93fa48810856e80a98d62dea3b2d3499864
+      # the action *repo* hosts both.
+      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@v0.3.0
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -123,7 +121,7 @@ jobs:
         # value on the command line always did) so Run tests below needs no
         # change, and PROG rides extra_make_args since the action has no
         # dedicated input for it.
-        uses: ballistics-lab/cibuildmp/.github/actions/build-usermod-unix@345db93fa48810856e80a98d62dea3b2d3499864
+        uses: ballistics-lab/cibuildmp/.github/actions/build-usermod-unix@v0.3.0
         with:
           arch: ${{ matrix.arch_label }}
           build_dir: build-wasm3
@@ -139,7 +137,7 @@ jobs:
         # its own header): ports/rp2/Makefile builds its cmake arguments
         # with CMAKE_ARGS +=, so this define can't just ride the make
         # command line without replacing the whole accumulated set.
-        uses: ballistics-lab/cibuildmp/.github/actions/build-usermod-rp2040@345db93fa48810856e80a98d62dea3b2d3499864
+        uses: ballistics-lab/cibuildmp/.github/actions/build-usermod-rp2040@v0.3.0
         with:
           build_dir: build-wasm3
           extra_cmake_args: -DMICROPY_C_HEAP_SIZE=131072
@@ -213,7 +211,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@345db93fa48810856e80a98d62dea3b2d3499864
+      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@v0.3.0
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -226,7 +224,7 @@ jobs:
         # alone drives every one of those (armhf/mipsel both link static
         # there), so no overrides needed; build_dir defaults to exactly
         # usermod/build/<arch>, matching what Run tests below already expects.
-        uses: ballistics-lab/cibuildmp/.github/actions/build-usermod-unix@345db93fa48810856e80a98d62dea3b2d3499864
+        uses: ballistics-lab/cibuildmp/.github/actions/build-usermod-unix@v0.3.0
         with:
           arch: ${{ matrix.arch }}
 
@@ -360,7 +358,7 @@ jobs:
         # now come from the shared action -- build_dir/extra_make_args
         # preserve the same build-wasm3/PROG=micropython-wasm3.exe this
         # job has always used, so Run tests below needs no changes.
-        uses: ballistics-lab/cibuildmp/.github/actions/build-usermod-windows@345db93fa48810856e80a98d62dea3b2d3499864
+        uses: ballistics-lab/cibuildmp/.github/actions/build-usermod-windows@v0.3.0
         with:
           build_dir: build-wasm3
           cflags_extra: ${{ matrix.cflags_extra }}
@@ -392,7 +390,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@345db93fa48810856e80a98d62dea3b2d3499864
+      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@v0.3.0
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -420,7 +418,7 @@ jobs:
 
       - name: Build usermod (webassembly)
         id: build
-        uses: ballistics-lab/cibuildmp/.github/actions/build-usermod-webassembly@345db93fa48810856e80a98d62dea3b2d3499864
+        uses: ballistics-lab/cibuildmp/.github/actions/build-usermod-webassembly@v0.3.0
         with:
           frozen_manifest: ${{ env.WASM_FROZEN_MANIFEST }}
 
@@ -481,7 +479,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@345db93fa48810856e80a98d62dea3b2d3499864
+      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@v0.3.0
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -495,7 +493,7 @@ jobs:
         # found here first (a real failure with no diagnostic in the
         # Actions log) and generalized into the action so bclibc/a7p get
         # it too.
-        uses: ballistics-lab/cibuildmp/.github/actions/build-usermod-esp32@345db93fa48810856e80a98d62dea3b2d3499864
+        uses: ballistics-lab/cibuildmp/.github/actions/build-usermod-esp32@v0.3.0
 
       - uses: actions/upload-artifact@v7
         with:
