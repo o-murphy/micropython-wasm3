@@ -85,7 +85,7 @@ jobs:
             runs_on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -201,7 +201,7 @@ jobs:
             qemu_bin: qemu-mipsel-static
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -316,7 +316,7 @@ jobs:
             cflags_extra: "-Wno-error"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -380,7 +380,7 @@ jobs:
     name: build + test (webassembly)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -428,7 +428,7 @@ jobs:
           python3 natmod/ci/run_wasm.py \
             "${{ steps.build.outputs.build_dir }}/micropython.mjs" test_wiring_apps.py --slow
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wasm3-usermod-webassembly
           path: |
@@ -469,7 +469,7 @@ jobs:
     name: build (esp32 / ESP32_GENERIC)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -542,7 +542,7 @@ jobs:
           source esp-idf/export.sh
           ninja -C "$BUILD" -v -k 0 2>&1 | tail -n 120 || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wasm3-usermod-esp32
           path: |

@@ -138,6 +138,14 @@ natmod ARCHes to six.
 
 ### Changed
 
+- CI: `actions/checkout`, `actions/upload-artifact` and
+  `actions/download-artifact` bumped from `v4` to `v7`/`v7`/`v8` across
+  `natmod.yml` and `usermod.yml`, matching the versions
+  `ballistics-lab/micropython-bclibc` and `o-murphy/a7p` already pin (and
+  already run green in CI) — this repo was the one left behind. Pure
+  version bump: every call here only ever used the stable
+  `submodules`/`name`/`path`/`if-no-files-found` inputs, none of which
+  changed shape across these major versions.
 - CI: `usermod.yml`'s unix rows (`x64`/`x86`/`aarch64`), `usermod-cross`
   (`armhf`/`mipsel`), and `usermod-windows` (`x64`/`x86`/`arm64`) no longer
   carry their own apt/cross-compile/deplibs/MSYS2 recipe inline — all three
