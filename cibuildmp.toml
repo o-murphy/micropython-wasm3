@@ -1,0 +1,16 @@
+# Experimental M5 draft -- not yet wired into CI (see the same pattern in
+# ballistics-lab/micropython-bclibc's own cibuildmp.toml and
+# ballistics-lab/a7p's micropython/cibuildmp.toml, the two sibling adopters
+# this one mirrors).
+#
+# No pre-build-command needed here, unlike a7p's nanopb fetch: wasm3 and
+# wasm2mpy are plain git submodules (see .gitmodules), already populated by
+# actions/checkout's own `submodules: recursive` in CI -- nothing left for
+# cibuildmp to fetch itself.
+
+micropython = "v1.28.0"
+
+[natmod]
+archs = ["x64", "x86", "armv6m", "armv7m", "armv7emsp", "armv7emdp",
+         "rv32imc", "rv64imc", "xtensa", "xtensawin"]
+module-dir = "natmod"
