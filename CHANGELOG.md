@@ -138,6 +138,14 @@ natmod ARCHes to six.
 
 ### Changed
 
+- CI: every `ballistics-lab/micropython-native-ci` action reference (both
+  `natmod.yml` and `usermod.yml`) is now pinned to the `v0.2.0` tag
+  instead of a mix of the `v0.1.0` tag (`fetch-micropython`,
+  `build-natmod-arch`) and the `claude/usermod-shared-action-kwulzv`
+  development branch (everything added this cycle). `build-natmod-arch`
+  also drops its `-arch` suffix (`build-natmod`) now that a tag past that
+  rename exists. No behavior change: `v0.2.0` is exactly what that branch
+  contained, squash-merged.
 - CI: `actions/checkout`, `actions/upload-artifact` and
   `actions/download-artifact` bumped from `v4` to `v7`/`v7`/`v8` across
   `natmod.yml` and `usermod.yml`, matching the versions
