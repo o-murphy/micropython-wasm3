@@ -65,6 +65,24 @@ what the hand-written fixtures exercise:
   x64/x86 in `natmod/Makefile`: a module compiled for the web declares
   whatever its toolchain chose, and the bclibc build wants 258 pages (16.1 MB)
   before it runs at all.
+- `usermod.yml` — the uploaded wasm build was missing `asyncio` and 24 stdlib
+  modules. `usermod-wasm` passed `FROZEN_MANIFEST=usermod/manifest.py` alone.
+  `usermod/manifest.py`'s own `try`/`except` around
+  `include("$(PORT_DIR)/boards/manifest.py")` only ever probes that one path,
+  which doesn't exist for `ports/webassembly` (it has `variants/`, not
+  `boards/`) — so the `except` silently swallowed it, and the port's real
+  default, `variants/pyscript/manifest.py`, never got included. That default
+  provides `asyncio` (backed by a custom JS-runtime scheduler) plus a
+  `require()` list of 24 stdlib/utility modules (`base64`, `collections`,
+  `gzip`, `os`, `pathlib`, `unittest`, `zlib`, and others). Neither
+  `test_wasm3.py` nor `test_wiring_apps.py` imports any of them, so the gap
+  never showed up as a test failure — but the `.mjs`/`.wasm` this job
+  uploads is a real build artifact, not just a test fixture, and anyone
+  importing `asyncio`/`os`/etc. against it hit a plain `ImportError`. The
+  job now writes a combined manifest (`variants/pyscript/manifest.py` +
+  this project's own `usermod/manifest.py`) and passes that instead, the
+  same pattern `o-murphy/a7p`'s own webassembly job already uses for this
+  exact port.
 
 ### Added
 
@@ -120,6 +138,30 @@ natmod ARCHes to six.
 
 ### Changed
 
+- CI: every `ballistics-lab/micropython-native-ci` action reference (both
+  `natmod.yml` and `usermod.yml`) is now pinned to the `v0.2.0` tag
+  instead of a mix of the `v0.1.0` tag (`fetch-micropython`,
+  `build-natmod-arch`) and the `claude/usermod-shared-action-kwulzv`
+  development branch (everything added this cycle). `build-natmod-arch`
+  also drops its `-arch` suffix (`build-natmod`) now that a tag past that
+  rename exists. No behavior change: `v0.2.0` is exactly what that branch
+  contained, squash-merged.
+- CI: `actions/checkout`, `actions/upload-artifact` and
+  `actions/download-artifact` bumped from `v4` to `v7`/`v7`/`v8` across
+  `natmod.yml` and `usermod.yml`, matching the versions
+  `ballistics-lab/micropython-bclibc` and `o-murphy/a7p` already pin (and
+  already run green in CI) — this repo was the one left behind. Pure
+  version bump: every call here only ever used the stable
+  `submodules`/`name`/`path`/`if-no-files-found` inputs, none of which
+  changed shape across these major versions.
+- CI: `usermod.yml`'s unix rows (`x64`/`x86`/`aarch64`), `usermod-cross`
+  (`armhf`/`mipsel`), and `usermod-windows` (`x64`/`x86`/`arm64`) no longer
+  carry their own apt/cross-compile/deplibs/MSYS2 recipe inline — all three
+  now call `build-usermod-unix`/`build-usermod-windows` from
+  [`ballistics-lab/micropython-native-ci`](https://github.com/ballistics-lab/micropython-native-ci),
+  the same repo `natmod.yml` already used for `build-natmod`. No
+  behavior change: `BUILD=build-wasm3`, `PROG=micropython-wasm3(.exe)`, and
+  every other build path stay exactly what they were.
 - The `usermod` `armhf` row runs on `ubuntu-24.04-arm` instead of under
   `qemu-user`. A GitHub arm64 runner executes 32-bit ARM on its own CPU —
   measured on the runner with a freestanding AArch32 binary, not assumed from
@@ -133,6 +175,37 @@ natmod ARCHes to six.
   `m3_validate.c:628` only after inlining the whole validator body. Upstream
   submodule code, so `-Wno-error` rather than a downstream patch — and
   `-Wno-error=` rather than `-Wno-`, so it still prints.
+- CI: `usermod-wasm` no longer carries its own inline emsdk-install/
+  mpy-cross/port-build recipe — it now calls `build-usermod-webassembly`
+  from
+  [`ballistics-lab/micropython-native-ci`](https://github.com/ballistics-lab/micropython-native-ci),
+  same as the unix/Windows jobs above. The "Write combined FROZEN_MANIFEST"
+  step (see Fixed, above) stays caller-side, as the action's own contract
+  requires. No behavior change: `VARIANT=pyscript`, `emsdk latest`, and every
+  build path stay exactly what they were.
+- CI: the `usermod` `rp2` row's toolchain-install/mpy-cross/port-build
+  steps are now `build-usermod-rp2040` from the same
+  `ballistics-lab/micropython-native-ci` repo. `extra_cmake_args:
+  -DMICROPY_C_HEAP_SIZE=131072` replaces the row's own two-step
+  configure-then-reconfigure dance — that input was added to the action
+  specifically for this case (`ports/rp2/Makefile` builds its `CMAKE_ARGS`
+  with `+=`, so this define can't ride the plain `make` command line
+  without replacing the whole accumulated set). Only the `pip install
+  rp2040py littlefs-python` step stays here; the arm-none-eabi + CMake
+  toolchain now lives inside the action.
+- CI: `usermod-esp32`'s ESP-IDF-install/mpy-cross/port-build steps are now
+  `build-usermod-esp32` from the same
+  `ballistics-lab/micropython-native-ci` repo. This job's own "Dump the
+  IDF build logs on failure" diagnostic (added after a real failure here
+  with no compiler diagnostic anywhere in the Actions log) is now folded
+  into the action itself, so `ballistics-lab/micropython-bclibc` and
+  `o-murphy/a7p` get it too. No `build_dir` input: a real CI failure on
+  bclibc's own first run of this action showed that an explicit `BUILD=`
+  override, even set to the port's own default value, made esp32's
+  internal CMake-driven `mpy-cross` sub-build pick up `FROZEN_MANIFEST`
+  through `MAKEFLAGS` and fail with `undefined reference to
+  mp_qstr_frozen_const_pool` — the action always uses `build-$(BOARD)`
+  now, same path Upload artifact already expects.
 
 ### Fixed
 

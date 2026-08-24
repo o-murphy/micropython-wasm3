@@ -56,23 +56,23 @@ jobs:
       fail-fast: false
       matrix:
         # Toolchain dispatch per ARCH (apt package / xtensa-lx106 tarball /
-        # esp-idf) now lives inside the build-natmod-arch action below.
+        # esp-idf) now lives inside the build-natmod action below.
         arch: [x64, x86, armv6m, armv7m, armv7emsp, armv7emdp, rv32imc, rv64imc, xtensa, xtensawin]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.1.0
+      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.2.0
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
-      - uses: ballistics-lab/micropython-native-ci/.github/actions/build-natmod-arch@v0.1.0
+      - uses: ballistics-lab/micropython-native-ci/.github/actions/build-natmod@v0.2.0
         with:
           arch: ${{ matrix.arch }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wasm3-${{ matrix.arch }}
           path: natmod/build/${{ matrix.arch }}/
@@ -99,11 +99,11 @@ jobs:
             kind: unix32
             label: x86 / micropython 32-bit
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.1.0
+      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.2.0
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -135,7 +135,7 @@ jobs:
         if: matrix.kind == 'unix32'
         run: make -C "$MPY_DIR/ports/unix" VARIANT=standard MICROPY_FORCE_32BIT=1
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: wasm3-${{ matrix.arch }}
           path: natmod/build/${{ matrix.arch }}/
@@ -213,11 +213,11 @@ jobs:
             # Already double, which is the unix port's own default.
             host_float: ""
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.1.0
+      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.2.0
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -267,7 +267,7 @@ jobs:
             CFLAGS_EXTRA="${{ matrix.host_float }}" \
             LDFLAGS_EXTRA="-static" -j"$(nproc)"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: wasm3-${{ matrix.arch }}
           path: natmod/build/${{ matrix.arch }}/
@@ -297,11 +297,11 @@ jobs:
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.1.0
+      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.2.0
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -322,7 +322,7 @@ jobs:
         # port's linker gives RAM 2 MB, so 1 MB is comfortably inside it.
         run: make -C "$MPY_DIR/ports/qemu" BOARD=MPS2_AN385 MICROPY_HEAP_SIZE=1048576
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: wasm3-armv7m
           path: natmod/build/armv7m/
@@ -348,11 +348,11 @@ jobs:
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.1.0
+      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.2.0
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -379,7 +379,7 @@ jobs:
         # tarball, so there is nothing to init.
         run: make -C "$MPY_DIR/ports/rp2" BOARD=RPI_PICO -j"$(nproc)"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: wasm3-armv6m
           path: natmod/build/armv6m/
