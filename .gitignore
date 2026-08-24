@@ -6,6 +6,7 @@ build_check/
 build_*/
 cmake-build-*/
 build-*/
+mpyhouse/
 
 *.o
 *.a

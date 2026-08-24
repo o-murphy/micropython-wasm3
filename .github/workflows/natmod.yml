@@ -56,7 +56,8 @@ jobs:
       fail-fast: false
       matrix:
         # Toolchain dispatch per ARCH (apt package / xtensa-lx106 tarball /
-        # esp-idf) now lives inside the build-natmod action below.
+        # esp-idf) now lives inside cibuildmp itself (see this repo's own
+        # cibuildmp.toml) -- host first, then a pinned download.
         arch: [x64, x86, armv6m, armv7m, armv7emsp, armv7emdp, rv32imc, rv64imc, xtensa, xtensawin]
 
     steps:
@@ -64,13 +65,24 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.2.0
-        with:
-          mpy_tag: ${{ env.MPY_TAG }}
+      # x86 is the one arch cibuildmp cannot self-provision (its own
+      # docs/BACKLOG.md M2): it is the host gcc's own -m32 mode, not a
+      # cross-compile, so no downloadable tarball can supply the missing
+      # 32-bit glibc headers/libs the way it does for every other arch here.
+      # The old build-natmod composite action installed this internally;
+      # cibuildmp does not, so it moves here explicitly -- same as
+      # micropython-bclibc's and a7p's own natmod workflows.
+      - if: matrix.arch == 'x86'
+        run: sudo apt-get update -q && sudo apt-get install -y gcc-multilib
 
-      - uses: ballistics-lab/micropython-native-ci/.github/actions/build-natmod@v0.2.0
-        with:
-          arch: ${{ matrix.arch }}
+      - uses: ballistics-lab/cibuildmp@v0.3.0
+        env:
+          # CIBMP_ARCHS, not a matrix-baked identifier: cibuildmp resolves
+          # the current .mpy ABI from the checked-out MicroPython itself,
+          # so this stays correct even if MPY_TAG moves to a tag with a
+          # different ABI, with nothing here to keep in sync by hand.
+          CIBMP_MICROPYTHON: ${{ env.MPY_TAG }}
+          CIBMP_ARCHS: ${{ matrix.arch }}
 
       - uses: actions/upload-artifact@v7
         with:
@@ -103,7 +115,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.2.0
+      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@v0.3.0
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -217,7 +229,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.2.0
+      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@v0.3.0
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -301,7 +313,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.2.0
+      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@v0.3.0
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -352,7 +364,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/micropython-native-ci/.github/actions/fetch-micropython@v0.2.0
+      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@v0.3.0
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 

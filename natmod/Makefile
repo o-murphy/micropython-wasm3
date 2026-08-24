@@ -30,6 +30,19 @@ MOD         = wasm3_$(ARCH)
 WASM3_ROOT  = ../wasm3
 SRC_DIR     = ../src
 BUILD       = build/$(ARCH)
+# dist: below renames the merged native output to $(BUILD)/wasm3.mpy -- the
+# exact path dynruntime.mk's own $(BUILD)/%.mpy: %.py rule also owns, for
+# the compiled *facade* (../src/wasm3.py). A second build in this same
+# $(BUILD) directory (e.g. cibuildmp run twice locally, or a stale build/
+# left over between local runs) finds that leftover, already-native file,
+# treats it as the up-to-date facade compile, and mpy-tool.py then refuses
+# to merge two files that both contain native code. A recipe-line `rm -f`
+# in dist: is too late -- by the time dist:'s own recipe runs, `all` has
+# already decided the stale file was fine. This has to happen before make
+# resolves any rule, hence $(shell) at parse time, not a prerequisite.
+# Same fix as ballistics-lab/micropython-bclibc's and a7p's own natmod
+# Makefiles.
+$(shell rm -f $(BUILD)/wasm3.mpy 2>/dev/null)
 VERSION_H   = generated/wasm3_mp/version.h
 VERSION_IN  = ../version.h.in
 
@@ -196,7 +209,7 @@ submodules:
 
 dist: all
 	$(Q)mv $(MOD).mpy $(BUILD)/wasm3.mpy
-	$(Q)rm -f $(BUILD)/$(MOD).mpy $(SRC_O) $(CONFIG_H)
+	$(Q)rm -f $(BUILD)/$(MOD).mpy $(BUILD)/$(MOD).native.mpy $(SRC_O) $(CONFIG_H)
 	$(ECHO) "  →  $(BUILD)/wasm3.mpy"
 
 clean:
