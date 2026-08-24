@@ -185,6 +185,19 @@ natmod ARCHes to six.
   without replacing the whole accumulated set). Only the `pip install
   rp2040py littlefs-python` step stays here; the arm-none-eabi + CMake
   toolchain now lives inside the action.
+- CI: `usermod-esp32`'s ESP-IDF-install/mpy-cross/port-build steps are now
+  `build-usermod-esp32` from the same
+  `ballistics-lab/micropython-native-ci` repo. This job's own "Dump the
+  IDF build logs on failure" diagnostic (added after a real failure here
+  with no compiler diagnostic anywhere in the Actions log) is now folded
+  into the action itself, so `ballistics-lab/micropython-bclibc` and
+  `o-murphy/a7p` get it too. No `build_dir` input: a real CI failure on
+  bclibc's own first run of this action showed that an explicit `BUILD=`
+  override, even set to the port's own default value, made esp32's
+  internal CMake-driven `mpy-cross` sub-build pick up `FROZEN_MANIFEST`
+  through `MAKEFLAGS` and fail with `undefined reference to
+  mp_qstr_frozen_const_pool` — the action always uses `build-$(BOARD)`
+  now, same path Upload artifact already expects.
 
 ### Fixed
 

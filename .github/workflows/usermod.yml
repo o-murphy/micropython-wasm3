@@ -477,70 +477,17 @@ jobs:
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
-      - name: Install esp-idf
-        # --recursive, unlike a natmod build of the same ISA: that one only
-        # wants the xtensa compiler install.sh downloads, this one compiles
-        # into a firmware built against IDF's own components.
-        # `install.sh esp32` limits the toolchain download to the one target.
-        env:
-          IDF_VER: v5.5.1
-        run: |
-          git clone --depth 1 --recursive --branch "$IDF_VER" \
-            https://github.com/espressif/esp-idf.git
-          ./esp-idf/install.sh esp32
-
-      - name: Build mpy-cross
-        # Before export.sh is sourced anywhere -- mpy-cross is a host tool and
-        # has no business being built inside IDF's own python/toolchain
-        # environment. Explicit for the usual reason, see the unix job.
-        run: make -C "$MPY_DIR/mpy-cross" -j"$(nproc)"
-
-      - name: Build ESP32 firmware
-        # USER_C_MODULES points at usermod/micropython.cmake itself: CMake's
-        # USER_C_MODULES takes a file, not a directory to glob, unlike the
-        # Make-based ports which take this repo's root.
-        run: |
-          source esp-idf/export.sh
-          make -C "$MPY_DIR/ports/esp32" \
-            BOARD=ESP32_GENERIC \
-            USER_C_MODULES="$GITHUB_WORKSPACE/usermod/micropython.cmake" \
-            FROZEN_MANIFEST="$GITHUB_WORKSPACE/usermod/manifest.py"
-
-      - name: Dump the IDF build logs
-        if: failure()
-        # idf.py redirects the compiler's own stderr into
-        # build-*/log/idf_py_stderr_output_<pid> and prints only "ninja failed
-        # with exit code 1" to the console, so a failing compile leaves no
-        # diagnostic in the Actions log at all -- which is exactly what
-        # happened on this job's first run (it stopped in
-        # wasm3/source/m3_compile.c with nothing to say why). Surface them.
-        #
-        # stdout first and short, stderr last and long, deliberately: stdout
-        # is ninja's progress spam and stderr is the compiler diagnostic, and
-        # a plain `for f in ...std*...` glob expands alphabetically -- stderr
-        # then stdout -- which buried the useful half 200 lines above the end
-        # of the log on the first attempt at this step.
-        #
-        # The log files turned out not to carry the diagnostic at all: idf.py's
-        # idf_py_stderr_output_* holds only its own bookkeeping ("Command:
-        # ninja all"), and the stdout copy of ninja's stream shows the failing
-        # target and then "ninja: build stopped" with nothing in between. So
-        # dump them for context, then get the real answer by re-running ninja
-        # verbosely in the same build directory: everything is already built
-        # except the one object that failed, so this recompiles just that and
-        # prints both the exact command line and the compiler's own output.
-        # `|| true` so this step reports rather than re-failing the job.
-        run: |
-          BUILD="$MPY_DIR/ports/esp32/build-ESP32_GENERIC"
-          for f in "$BUILD"/log/idf_py_std*_output_*; do
-            [ -f "$f" ] || continue
-            echo "::group::$f"
-            tail -n 60 "$f"
-            echo "::endgroup::"
-          done
-          echo "--- re-running ninja verbosely to surface the diagnostic:"
-          source esp-idf/export.sh
-          ninja -C "$BUILD" -v -k 0 2>&1 | tail -n 120 || true
+      - name: Build usermod (esp32, ESP32_GENERIC)
+        # No build_dir input: the action always uses the port's own
+        # build-$(BOARD) default -- an explicit BUILD= override, even set
+        # to that exact value, broke esp32's internal CMake-driven
+        # mpy-cross sub-build on bclibc's own first run of this action
+        # (see its own header for the full story). Also folds in this
+        # job's own "Dump the IDF build logs" diagnostic universally now,
+        # found here first (a real failure with no diagnostic in the
+        # Actions log) and generalized into the action so bclibc/a7p get
+        # it too.
+        uses: ballistics-lab/micropython-native-ci/.github/actions/build-usermod-esp32@claude/usermod-shared-action-kwulzv
 
       - uses: actions/upload-artifact@v7
         with:
