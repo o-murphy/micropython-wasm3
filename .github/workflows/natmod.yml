@@ -56,7 +56,7 @@ jobs:
       fail-fast: false
       matrix:
         # Toolchain dispatch per ARCH (apt package / xtensa-lx106 tarball /
-        # esp-idf) now lives inside the build-natmod-arch action below.
+        # esp-idf) now lives inside the build-natmod action below.
         arch: [x64, x86, armv6m, armv7m, armv7emsp, armv7emdp, rv32imc, rv64imc, xtensa, xtensawin]
 
     steps:
@@ -68,7 +68,7 @@ jobs:
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
-      - uses: ballistics-lab/micropython-native-ci/.github/actions/build-natmod-arch@v0.1.0
+      - uses: ballistics-lab/micropython-native-ci/.github/actions/build-natmod@v0.1.0
         with:
           arch: ${{ matrix.arch }}
 

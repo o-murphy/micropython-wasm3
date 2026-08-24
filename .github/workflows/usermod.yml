@@ -107,7 +107,7 @@ jobs:
       - name: Build mpy-cross
         # Explicitly, before FROZEN_MANIFEST ever appears on a command line --
         # py/mkenv.mk's auto-build rule for it races under -j. Unix rows no
-        # longer need this here at all: build-usermod-unix-arch below builds
+        # longer need this here at all: build-usermod-unix below builds
         # it as part of the same fix.
         if: matrix.port == 'rp2'
         run: make -C "$MPY_DIR/mpy-cross"
@@ -127,7 +127,7 @@ jobs:
         # value on the command line always did) so Run tests below needs no
         # change, and PROG rides extra_make_args since the action has no
         # dedicated input for it.
-        uses: ballistics-lab/micropython-native-ci/.github/actions/build-usermod-unix-arch@claude/usermod-shared-action-kwulzv
+        uses: ballistics-lab/micropython-native-ci/.github/actions/build-usermod-unix@claude/usermod-shared-action-kwulzv
         with:
           arch: ${{ matrix.arch_label }}
           build_dir: build-wasm3
@@ -237,7 +237,7 @@ jobs:
         # alone drives every one of those (armhf/mipsel both link static
         # there), so no overrides needed; build_dir defaults to exactly
         # usermod/build/<arch>, matching what Run tests below already expects.
-        uses: ballistics-lab/micropython-native-ci/.github/actions/build-usermod-unix-arch@claude/usermod-shared-action-kwulzv
+        uses: ballistics-lab/micropython-native-ci/.github/actions/build-usermod-unix@claude/usermod-shared-action-kwulzv
         with:
           arch: ${{ matrix.arch }}
 
@@ -371,7 +371,7 @@ jobs:
         # now come from the shared action -- build_dir/extra_make_args
         # preserve the same build-wasm3/PROG=micropython-wasm3.exe this
         # job has always used, so Run tests below needs no changes.
-        uses: ballistics-lab/micropython-native-ci/.github/actions/build-usermod-windows-arch@claude/usermod-shared-action-kwulzv
+        uses: ballistics-lab/micropython-native-ci/.github/actions/build-usermod-windows@claude/usermod-shared-action-kwulzv
         with:
           build_dir: build-wasm3
           cflags_extra: ${{ matrix.cflags_extra }}
@@ -431,7 +431,7 @@ jobs:
 
       - name: Build usermod (webassembly)
         id: build
-        uses: ballistics-lab/micropython-native-ci/.github/actions/build-usermod-webassembly-arch@claude/usermod-shared-action-kwulzv
+        uses: ballistics-lab/micropython-native-ci/.github/actions/build-usermod-webassembly@claude/usermod-shared-action-kwulzv
         with:
           frozen_manifest: ${{ env.WASM_FROZEN_MANIFEST }}
 

@@ -141,9 +141,9 @@ natmod ARCHes to six.
 - CI: `usermod.yml`'s unix rows (`x64`/`x86`/`aarch64`), `usermod-cross`
   (`armhf`/`mipsel`), and `usermod-windows` (`x64`/`x86`/`arm64`) no longer
   carry their own apt/cross-compile/deplibs/MSYS2 recipe inline — all three
-  now call `build-usermod-unix-arch`/`build-usermod-windows-arch` from
+  now call `build-usermod-unix`/`build-usermod-windows` from
   [`ballistics-lab/micropython-native-ci`](https://github.com/ballistics-lab/micropython-native-ci),
-  the same repo `natmod.yml` already used for `build-natmod-arch`. No
+  the same repo `natmod.yml` already used for `build-natmod`. No
   behavior change: `BUILD=build-wasm3`, `PROG=micropython-wasm3(.exe)`, and
   every other build path stay exactly what they were.
 - The `usermod` `armhf` row runs on `ubuntu-24.04-arm` instead of under
@@ -160,7 +160,7 @@ natmod ARCHes to six.
   submodule code, so `-Wno-error` rather than a downstream patch — and
   `-Wno-error=` rather than `-Wno-`, so it still prints.
 - CI: `usermod-wasm` no longer carries its own inline emsdk-install/
-  mpy-cross/port-build recipe — it now calls `build-usermod-webassembly-arch`
+  mpy-cross/port-build recipe — it now calls `build-usermod-webassembly`
   from
   [`ballistics-lab/micropython-native-ci`](https://github.com/ballistics-lab/micropython-native-ci),
   same as the unix/Windows jobs above. The "Write combined FROZEN_MANIFEST"
