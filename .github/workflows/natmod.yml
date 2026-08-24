@@ -79,7 +79,7 @@ jobs:
       # M3/D13-D15 (see ballistics-lab/micropython-bclibc's own natmod.yml
       # for the same TODO and the same reasoning -- v0.3.0a1 predates M3
       # entirely). Not @main: never float a consumer's pin.
-      - uses: ballistics-lab/cibuildmp@c114986359a071bc9c3865fc103c895f74959cde
+      - uses: ballistics-lab/cibuildmp@345db93fa48810856e80a98d62dea3b2d3499864
         env:
           # CIBMP_ARCHS, not a matrix-baked identifier: cibuildmp resolves
           # the current .mpy ABI from the checked-out MicroPython itself,
@@ -119,7 +119,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@c114986359a071bc9c3865fc103c895f74959cde
+      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@345db93fa48810856e80a98d62dea3b2d3499864
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -233,7 +233,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@c114986359a071bc9c3865fc103c895f74959cde
+      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@345db93fa48810856e80a98d62dea3b2d3499864
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -317,7 +317,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@c114986359a071bc9c3865fc103c895f74959cde
+      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@345db93fa48810856e80a98d62dea3b2d3499864
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -368,7 +368,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@c114986359a071bc9c3865fc103c895f74959cde
+      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@345db93fa48810856e80a98d62dea3b2d3499864
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
