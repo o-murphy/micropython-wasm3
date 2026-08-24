@@ -415,13 +415,35 @@ jobs:
       - name: Build mpy-cross
         run: make -C "$MPY_DIR/mpy-cross"
 
+      - name: Write combined FROZEN_MANIFEST
+        # usermod/manifest.py's own try/except only ever probes
+        # $(PORT_DIR)/boards/manifest.py -- a no-op here, since
+        # ports/webassembly has no boards/, only variants/. That silently
+        # drops pyscript's real default (variants/pyscript/manifest.py):
+        # asyncio (JS-scheduler backed) plus a require() list of 24
+        # stdlib/utility modules (base64, collections, gzip, os, pathlib,
+        # unittest, zlib, ...). Neither test_wasm3.py nor
+        # test_wiring_apps.py imports any of them, which is why this went
+        # unnoticed in CI -- but the .mjs/.wasm this job uploads is a real
+        # build artifact, not just a test fixture, and anyone importing
+        # asyncio/os/etc. against it would hit a plain ImportError. Combine
+        # explicitly instead, same pattern a7p's own webassembly job
+        # already uses for this exact port.
+        run: |
+          cat > "$RUNNER_TEMP/wasm_manifest.py" <<EOF
+          include("\$(PORT_DIR)/variants/pyscript/manifest.py")
+          include("$GITHUB_WORKSPACE/usermod/manifest.py")
+          EOF
+          cat "$RUNNER_TEMP/wasm_manifest.py"
+          echo "WASM_FROZEN_MANIFEST=$RUNNER_TEMP/wasm_manifest.py" >> "$GITHUB_ENV"
+
       - name: Build usermod (webassembly, pyscript variant)
         run: |
           source emsdk/emsdk_env.sh
           make -C "$MPY_DIR/ports/webassembly" VARIANT=pyscript \
             BUILD="$GITHUB_WORKSPACE/usermod/build/wasm" \
             USER_C_MODULES="$GITHUB_WORKSPACE" \
-            FROZEN_MANIFEST="$GITHUB_WORKSPACE/usermod/manifest.py" \
+            FROZEN_MANIFEST="$WASM_FROZEN_MANIFEST" \
             -j"$(nproc)"
 
       - name: Run both suites under node
