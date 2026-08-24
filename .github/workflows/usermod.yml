@@ -407,14 +407,6 @@ jobs:
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
-      - name: Install emsdk
-        run: |
-          git clone --depth 1 https://github.com/emscripten-core/emsdk.git
-          (cd emsdk && ./emsdk install latest && ./emsdk activate latest)
-
-      - name: Build mpy-cross
-        run: make -C "$MPY_DIR/mpy-cross"
-
       - name: Write combined FROZEN_MANIFEST
         # usermod/manifest.py's own try/except only ever probes
         # $(PORT_DIR)/boards/manifest.py -- a no-op here, since
@@ -437,14 +429,11 @@ jobs:
           cat "$RUNNER_TEMP/wasm_manifest.py"
           echo "WASM_FROZEN_MANIFEST=$RUNNER_TEMP/wasm_manifest.py" >> "$GITHUB_ENV"
 
-      - name: Build usermod (webassembly, pyscript variant)
-        run: |
-          source emsdk/emsdk_env.sh
-          make -C "$MPY_DIR/ports/webassembly" VARIANT=pyscript \
-            BUILD="$GITHUB_WORKSPACE/usermod/build/wasm" \
-            USER_C_MODULES="$GITHUB_WORKSPACE" \
-            FROZEN_MANIFEST="$WASM_FROZEN_MANIFEST" \
-            -j"$(nproc)"
+      - name: Build usermod (webassembly)
+        id: build
+        uses: ballistics-lab/micropython-native-ci/.github/actions/build-usermod-webassembly-arch@claude/usermod-shared-action-kwulzv
+        with:
+          frozen_manifest: ${{ env.WASM_FROZEN_MANIFEST }}
 
       - name: Run both suites under node
         # Via natmod/ci/run_wasm.py rather than `node micropython.mjs
@@ -454,9 +443,9 @@ jobs:
         # through the same _INJECTED hook the QEMU runner uses.
         run: |
           python3 natmod/ci/run_wasm.py \
-            usermod/build/wasm/micropython.mjs test_wasm3.py
+            "${{ steps.build.outputs.build_dir }}/micropython.mjs" test_wasm3.py
           python3 natmod/ci/run_wasm.py \
-            usermod/build/wasm/micropython.mjs test_wiring_apps.py --slow
+            "${{ steps.build.outputs.build_dir }}/micropython.mjs" test_wiring_apps.py --slow
 
       - uses: actions/upload-artifact@v4
         with:

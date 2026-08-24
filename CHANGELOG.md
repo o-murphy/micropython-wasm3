@@ -159,6 +159,14 @@ natmod ARCHes to six.
   `m3_validate.c:628` only after inlining the whole validator body. Upstream
   submodule code, so `-Wno-error` rather than a downstream patch — and
   `-Wno-error=` rather than `-Wno-`, so it still prints.
+- CI: `usermod-wasm` no longer carries its own inline emsdk-install/
+  mpy-cross/port-build recipe — it now calls `build-usermod-webassembly-arch`
+  from
+  [`ballistics-lab/micropython-native-ci`](https://github.com/ballistics-lab/micropython-native-ci),
+  same as the unix/Windows jobs above. The "Write combined FROZEN_MANIFEST"
+  step (see Fixed, above) stays caller-side, as the action's own contract
+  requires. No behavior change: `VARIANT=pyscript`, `emsdk latest`, and every
+  build path stay exactly what they were.
 
 ### Fixed
 
