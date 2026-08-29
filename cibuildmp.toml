@@ -1,16 +1,81 @@
-# Experimental M5 draft -- not yet wired into CI (see the same pattern in
-# ballistics-lab/micropython-bclibc's own cibuildmp.toml and
-# ballistics-lab/a7p's micropython/cibuildmp.toml, the two sibling adopters
-# this one mirrors).
+# M5 adoption (cibuildmp record 0038) -- the new unified `build`/`skip` glob
+# schema (records 0051/0052), replacing the old [natmod] table + micropython=
+# archs= keys this file carried before cibuildmp's own config rewrite. See
+# ballistics-lab/a7p's own micropython/cibuildmp.toml for the sibling config
+# this one mirrors.
 #
 # No pre-build-command needed here, unlike a7p's nanopb fetch: wasm3 and
 # wasm2mpy are plain git submodules (see .gitmodules), already populated by
 # actions/checkout's own `submodules: recursive` in CI -- nothing left for
 # cibuildmp to fetch itself.
+#
+# manifest/user-c-modules are usermod's own generic keys (natmod's schema
+# has neither, so they're harmless to it). `user-c-modules = "usermod"`
+# matches usermod/micropython.mk|.cmake already sitting directly under
+# usermod/, one level under the project root -- the same layout
+# examples/template's own convention expects.
+#
+# natmod: every arch dynruntime.mk supports, one MicroPython tag (unchanged
+# from the old [natmod] table's own archs= list).
+#
+# usermod: unix x64/x86/aarch64 (manylinux, glibc), unix armhf/mipsel
+# (usermod-cross), windows all three arches, webassembly, esp32
+# ESP32_GENERIC, rp2 RPI_PICO -- every port/arch usermod.yml already builds.
+# No qemu-MPS2_AN385 identifier here: unlike a7p, this repo's own QEMU
+# coverage (natmod.yml's test-armv7m) loads a natmod .mpy into a firmware
+# built by hand, not a usermod compiled in via cibuildmp's own qemu driver
+# -- there is no usermod/qemu row in usermod.yml to ask cibuildmp for that
+# identifier at all.
+build = """
+mpy*-v1.28.0-*
+v1.28.0-manylinux_2_28_x86_64 v1.28.0-manylinux_2_28_i686 v1.28.0-manylinux_2_28_aarch64
+v1.28.0-manylinux_2_31_armv7l v1.28.0-manylinux_2_39_mipsel
+v1.28.0-win32 v1.28.0-win_amd64 v1.28.0-win_arm64
+v1.28.0-wasm32
+v1.28.0-esp32-ESP32_GENERIC
+v1.28.0-rp2-RPI_PICO
+"""
 
-micropython = "v1.28.0"
-
-[natmod]
-archs = ["x64", "x86", "armv6m", "armv7m", "armv7emsp", "armv7emdp",
-         "rv32imc", "rv64imc", "xtensa", "xtensawin"]
 module-dir = "natmod"
+manifest = "usermod/manifest.py"
+user-c-modules = "usermod"
+
+# PROG=micropython-wasm3(.exe) -- the top-level `build`/`user-c-modules`/
+# `manifest` keys above apply to every port at once, but the action itself
+# exposes no per-invocation extra-make-args input (only package-dir/build/
+# skip/extras/keep-going, see cibuildmp's own action.yml), so a port-specific
+# make override has to live here instead, via [override]. Both are plain
+# `PROG ?= micropython` defaults in ports/unix/Makefile and
+# ports/windows/Makefile (checked against a real v1.28.0 checkout, not
+# assumed) -- a single command-line PROG=... is a safe override, unlike
+# rp2's own CMAKE_ARGS (see usermod/micropython.cmake's own comment for why
+# that one is no longer configured from here at all).
+[override."v1.28.0-manylinux_*"]
+extra-make-args = ["PROG=micropython-wasm3"]
+
+[override."v1.28.0-win*"]
+extra-make-args = ["PROG=micropython-wasm3.exe"]
+
+# armhf's own row (usermod.yml's usermod-cross job) needs a static link, not
+# a CI convenience: it targets minimal embedded Linux boards this project
+# cannot assume have a matching ld.so/libc (same reasoning micropython/
+# micropython#17456 gives). Record 0043 (cibuildmp) dropped the vendored
+# MICROPY_STANDALONE=1/deplibs path for armv7l -- "pkg-config --libs libffi
+# resolves to -lffi inside manylinux_2_31_armv7l" was true for the *dynamic*
+# case it was checking, not this one, and that deplibs step is gated by a
+# hardcoded per-arch flag in cibuildmp itself (UNIX_ARCH_SETTINGS), not
+# something this file can turn back on.
+#
+# This override tries the plain, no-deplibs route instead: manylinux_2_31 is
+# glibc 2.31 (Ubuntu 20.04/Debian-floor), and unlike RPM-family images,
+# Debian/Ubuntu -dev packages ship the .a alongside the .so by default -- so
+# there is a real chance the image's own libc6-dev/libffi-dev already carry
+# what -static needs, with no vendored libffi build required at all. Genuinely
+# untested as of this commit (no Docker in the environment that wrote this) --
+# first real CI run on this identifier is the actual answer. `inherit` layers
+# this onto the manylinux_* row's own PROG= above rather than replacing it
+# (inherit defaults to "none"/replace otherwise, and PROG=micropython-wasm3
+# is still needed here).
+[override."v1.28.0-manylinux_2_31_armv7l"]
+extra-make-args = ["LDFLAGS_EXTRA=-static"]
+inherit = { extra-make-args = "append" }
