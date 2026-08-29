@@ -10,10 +10,23 @@
 # cibuildmp to fetch itself.
 #
 # manifest/user-c-modules are usermod's own generic keys (natmod's schema
-# has neither, so they're harmless to it). `user-c-modules = "usermod"`
-# matches usermod/micropython.mk|.cmake already sitting directly under
-# usermod/, one level under the project root -- the same layout
-# examples/template's own convention expects.
+# has neither, so they're harmless to it). Top-level `user-c-modules =
+# "usermod"` is the cmake-port value only now (rp2, esp32):
+# cibuildmp.platforms.usermod.portinfo.resolve_user_c_modules() appends
+# `/micropython.cmake` onto it directly for those two, landing exactly on
+# usermod/micropython.cmake. Make ports (unix, windows, webassembly) work
+# differently -- py/py.mk globs `<USER_C_MODULES>/*/micropython.mk`, one
+# directory level *above* where usermod/micropython.mk actually sits -- so
+# they need the override just below, `user-c-modules = "."`, instead.
+#
+# Live-caught 2026-08-29 (usermod runs #58/#59): every make-port build
+# still succeeded with the wrong ("usermod") value, silently -- the glob
+# just matches nothing and py.mk proceeds with zero user modules, no error
+# anywhere. Only the *test* step surfaced it (`from _wasm3 import version`
+# swallowed as ImportError by src/wasm3.py's own natmod fallback, so
+# `wasm3.version()` raised AttributeError at runtime) -- confirming a
+# usermod build "succeeding" here only proves the *port* linked, never
+# that the module actually made it in.
 #
 # natmod: every arch dynruntime.mk supports, one MicroPython tag (unchanged
 # from the old [natmod] table's own archs= list).
@@ -39,6 +52,9 @@ v1.28.0-rp2-RPI_PICO
 module-dir = "natmod"
 manifest = "usermod/manifest.py"
 user-c-modules = "usermod"
+
+[override."v1.28.0-manylinux_* v1.28.0-win* v1.28.0-wasm32"]
+user-c-modules = "."
 
 # No PROG=micropython-wasm3(.exe) override -- tried it, dropped it. The old
 # job never renamed unix's own binary at all (always plain "micropython");
