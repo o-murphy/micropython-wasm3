@@ -344,9 +344,14 @@ jobs:
           path: build
 
       - name: Run tests (windows-${{ matrix.arch_label }})
+        # cd tests first: test_wasm3.py/test_wiring_apps.py's own read()
+        # opens fixtures (wasm/add.wasm etc.) by a path relative to CWD, not
+        # to the script -- same reason the unix/mipsel jobs cd there too.
+        # Live-caught here without it: OSError ENOENT on every fixture.
         run: |
-          .\build\micropython.exe tests\test_wasm3.py
-          .\build\micropython.exe tests\test_wiring_apps.py --slow
+          cd tests
+          ..\build\micropython.exe test_wasm3.py
+          ..\build\micropython.exe test_wiring_apps.py --slow
 
   # ── ports/webassembly: wasm3 compiled to wasm, run under node ─────────────
   # natmod cannot reach this port either — dynruntime.mk has no WASM ARCH, and
