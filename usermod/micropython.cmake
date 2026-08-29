@@ -17,8 +17,11 @@
 # registered with MP_REGISTER_ROOT_POINTER, since a usermod's globals live in
 # firmware .bss that gc_collect() does not scan. So the port must actually have
 # a C heap. rp2 defaults MICROPY_C_HEAP_SIZE to 0, which makes every wasm3
-# allocation fail and faults the CPU inside wasm3.Module(); configure with
-# -DMICROPY_C_HEAP_SIZE=131072 (or more, sized to the modules you load).
+# allocation fail and faults the CPU inside wasm3.Module(). This file now
+# defaults it to 131072 itself (below) rather than requiring every caller to
+# pass -DMICROPY_C_HEAP_SIZE= by hand -- an external -D still wins when given
+# (CMake CACHE variables from the command line resolve before this file's own
+# `include()` runs), so a caller that wants a different size still can.
 cmake_minimum_required(VERSION 3.13)
 
 get_filename_component(_USERMOD_DIR "${CMAKE_CURRENT_LIST_FILE}" DIRECTORY)
@@ -61,18 +64,25 @@ endif()
 # with MP_REGISTER_ROOT_POINTER, since a usermod's globals live in firmware
 # .bss that gc_collect() does not scan). rp2 defines MICROPY_C_HEAP_SIZE and
 # defaults it to 0, which makes every wasm3 allocation fail and faults the CPU
-# inside wasm3.Module() with no diagnostic at all. Catch it here instead.
+# inside wasm3.Module() with no diagnostic at all.
+#
+# This used to be a FATAL_ERROR pointing the caller at a -D flag to pass by
+# hand -- moved from cibuildmp's own generic per-port `extra-make-args`
+# passthrough. Investigated live: ports/rp2/CMakeLists.txt checks
+# MICROPY_C_HEAP_SIZE (defaulting it to 0) *before* py/usermod.cmake includes
+# this file, but py/usermod.cmake's own `include(${USER_C_MODULE_PATH})` is a
+# same-scope include (not add_subdirectory), and the linker flag that actually
+# consumes the value is emitted later still -- so a plain `set()` here runs
+# after the 0 default and before the value is read, and does take effect
+# (verified with a standalone CMakeLists.txt reproducing that exact
+# before-default / include / after-read order). 131072 is what every build of
+# this module -- CI included -- has always used; sized to the modules you
+# intend to load if that ever needs to grow.
 #
 # Guarded on DEFINED: only rp2 has this variable. Ports with a real malloc
-# (esp32's IDF heap, for one) never define it and must not trip this.
+# (esp32's IDF heap, for one) never define it and must not get one here.
 if(DEFINED MICROPY_C_HEAP_SIZE AND MICROPY_C_HEAP_SIZE STREQUAL "0")
-    message(FATAL_ERROR
-        "wasm3 usermod needs a C heap, but MICROPY_C_HEAP_SIZE is 0.\n"
-        "wasm3 allocates its code pages, runtime and wasm linear memory through "
-        "the port's calloc(); with no C heap every one of them fails and the "
-        "firmware faults inside wasm3.Module().\n"
-        "Configure with -DMICROPY_C_HEAP_SIZE=131072 (or more, sized to the "
-        "modules you intend to load).")
+    set(MICROPY_C_HEAP_SIZE 131072)
 endif()
 
 # ── Module library ────────────────────────────────────────────────────────────
