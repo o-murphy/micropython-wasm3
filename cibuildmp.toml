@@ -40,23 +40,19 @@ module-dir = "natmod"
 manifest = "usermod/manifest.py"
 user-c-modules = "usermod"
 
-# PROG=micropython-wasm3(.exe) -- the top-level `build`/`user-c-modules`/
-# `manifest` keys above apply to every port at once, but the action itself
-# exposes no per-invocation extra-make-args input (only package-dir/build/
-# skip/extras/keep-going, see cibuildmp's own action.yml), so a port-specific
-# make override has to live here instead, via [override]. Both are plain
-# `PROG ?= micropython` defaults in ports/unix/Makefile and
-# ports/windows/Makefile (checked against a real v1.28.0 checkout, not
-# assumed) -- a single command-line PROG=... is a safe override, unlike
-# rp2's own CMAKE_ARGS (see usermod/micropython.cmake's own comment for why
-# that one is no longer configured from here at all).
-[override."v1.28.0-manylinux_*"]
-extra-make-args = ["PROG=micropython-wasm3"]
-
-[override."v1.28.0-win*"]
-extra-make-args = ["PROG=micropython-wasm3.exe"]
-
-# armhf's own row (usermod.yml's usermod-cross job) needs a static link, not
+# No PROG=micropython-wasm3(.exe) override -- tried it, dropped it. The old
+# job never renamed unix's own binary at all (always plain "micropython");
+# windows's own rename was cosmetic only. Live-caught 2026-08-29: cibuildmp's
+# own build_unix()/build_windows() verify the finished binary at a hardcoded
+# path (opts.build_dir / "micropython"[.exe]) with no knowledge that
+# extra-make-args can rename PROG -- the link itself succeeds under the
+# renamed name, but that hardcoded check then reports "build reported
+# success but .../micropython is missing" and fails the build. Not a config
+# mistake to work around here: nothing needs the module-named binary, so the
+# override is simply gone and usermod.yml's own steps reference the port's
+# real default name instead.
+#
+# armhf's own row (usermod.yml's usermod-armhf job) needs a static link, not
 # a CI convenience: it targets minimal embedded Linux boards this project
 # cannot assume have a matching ld.so/libc (same reasoning micropython/
 # micropython#17456 gives). Record 0043 (cibuildmp) dropped the vendored
@@ -66,19 +62,16 @@ extra-make-args = ["PROG=micropython-wasm3.exe"]
 # hardcoded per-arch flag in cibuildmp itself (UNIX_ARCH_SETTINGS), not
 # something this file can turn back on.
 #
-# This override tries the plain, no-deplibs route instead: manylinux_2_31 is
-# glibc 2.31 (Ubuntu 20.04/Debian-floor), and unlike RPM-family images,
-# Debian/Ubuntu -dev packages ship the .a alongside the .so by default -- so
-# there is a real chance the image's own libc6-dev/libffi-dev already carry
-# what -static needs, with no vendored libffi build required at all. Genuinely
-# untested as of this commit (no Docker in the environment that wrote this) --
-# first real CI run on this identifier is the actual answer. `inherit` layers
-# this onto the manylinux_* row's own PROG= above rather than replacing it
-# (inherit defaults to "none"/replace otherwise, and PROG=micropython-wasm3
-# is still needed here).
+# This override uses the plain, no-deplibs route instead, and it works:
+# confirmed live 2026-08-29 (usermod run #58) -- a real -static link against
+# manylinux_2_31_armv7l's own libc6-dev/libffi-dev succeeded with no deplibs
+# step at all (only the two expected dlopen/getaddrinfo static-link
+# warnings ld always prints, not errors). manylinux_2_31 is glibc 2.31
+# (Ubuntu 20.04/Debian-floor), and unlike RPM-family images, Debian/Ubuntu
+# -dev packages ship the .a alongside the .so by default -- which is exactly
+# what made this work with no vendored libffi build required.
 [override."v1.28.0-manylinux_2_31_armv7l"]
 extra-make-args = ["LDFLAGS_EXTRA=-static"]
-inherit = { extra-make-args = "append" }
 
 # webassembly's own manifest problem: ports/webassembly has no boards/, only
 # variants/, so the plain top-level `manifest` above never pulls in the

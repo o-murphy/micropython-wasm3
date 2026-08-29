@@ -119,13 +119,16 @@ jobs:
         run: pip install "rp2040py==0.3.1" littlefs-python
 
       - name: Build usermod (${{ matrix.identifier }})
-        # PROG=micropython-wasm3 rides cibuildmp.toml's own [override] now
-        # (the unified action has no per-invocation extra-make-args input),
-        # and MICROPY_C_HEAP_SIZE is usermod/micropython.cmake's own default
-        # -- see that file's own comment. build_dir is always
-        # ports/<port>/build-<identifier> now (cibuildmp's own
-        # orchestrate.py, not configurable), which the Run tests steps
-        # below reference directly.
+        # MICROPY_C_HEAP_SIZE is usermod/micropython.cmake's own default --
+        # see that file's own comment; no PROG override, no config needed for
+        # it (see cibuildmp.toml's own comment on why that was tried and
+        # dropped). build_dir is ports/<port>/build-<identifier> for unix
+        # (build_unix()'s own explicit BUILD= override), but ports/<port>/
+        # build-<BOARD> for rp2 -- build_rp2() deliberately passes no BUILD=
+        # override at all (its own comment: an explicit one, even set to
+        # that exact value, leaks FROZEN_MANIFEST into the port's internal
+        # mpy-cross sub-build via MAKEFLAGS), so the Run tests steps below
+        # key on whichever this port's driver actually uses.
         uses: ballistics-lab/cibuildmp@46808922ec7f92d591473410218a51b07b6a317c
         with:
           build: ${{ matrix.identifier }}
@@ -135,7 +138,7 @@ jobs:
         # No wasm3.mpy in tests/ -- it would shadow the frozen wasm3.py.
         run: |
           cd tests
-          BIN="$CIBMP_CACHE_PATH/micropython/$MPY_TAG/ports/unix/build-${{ matrix.identifier }}/micropython-wasm3"
+          BIN="$CIBMP_CACHE_PATH/micropython/$MPY_TAG/ports/unix/build-${{ matrix.identifier }}/micropython"
           "$BIN" test_wasm3.py
           "$BIN" test_wiring_apps.py --slow
 
@@ -144,9 +147,11 @@ jobs:
         # --no-mpy: the module is in the firmware, so the littlefs image
         # carries only the .wasm blobs. Core suite only, for the same reason
         # the natmod armv6m leg runs only that -- see README under Status.
+        # build-RPI_PICO, not build-<identifier>: see this step's own Build
+        # usermod comment above.
         run: |
           python3 natmod/ci/run_rp2040py.py \
-            "$CIBMP_CACHE_PATH/micropython/$MPY_TAG/ports/rp2/build-${{ matrix.identifier }}/firmware.uf2" . --no-mpy
+            "$CIBMP_CACHE_PATH/micropython/$MPY_TAG/ports/rp2/build-RPI_PICO/firmware.uf2" . --no-mpy
 
   # ── Cross-built unix: armhf on real hardware, mipsel under qemu-user ──────
   # Its own job rather than two more rows in the matrix above, because the
@@ -193,13 +198,11 @@ jobs:
 
       - name: Build usermod (v1.28.0-manylinux_2_31_armv7l)
         # Static via cibuildmp.toml's own [override."v1.28.0-manylinux_2_31_armv7l"]
-        # (LDFLAGS_EXTRA=-static, appended onto the manylinux_* row's own
-        # PROG=micropython-wasm3) rather than the old composite action's
+        # (LDFLAGS_EXTRA=-static) rather than the old composite action's
         # MICROPY_STANDALONE=1/deplibs path -- see that override's own
-        # comment for why, and for the fact that this is a genuine, first-run
-        # experiment: whether manylinux_2_31_armv7l's own libc6-dev/libffi-dev
-        # ship the .a files a plain -static link needs has not been proven
-        # live before this run.
+        # comment: confirmed live (usermod run #58) that manylinux_2_31_armv7l's
+        # own libc6-dev/libffi-dev already ship what a plain -static link
+        # needs, no vendored libffi build required.
         uses: ballistics-lab/cibuildmp@46808922ec7f92d591473410218a51b07b6a317c
         with:
           build: v1.28.0-manylinux_2_31_armv7l
@@ -211,7 +214,7 @@ jobs:
         # actually came out static.
         run: |
           cd tests
-          BIN="$CIBMP_CACHE_PATH/micropython/$MPY_TAG/ports/unix/build-v1.28.0-manylinux_2_31_armv7l/micropython-wasm3"
+          BIN="$CIBMP_CACHE_PATH/micropython/$MPY_TAG/ports/unix/build-v1.28.0-manylinux_2_31_armv7l/micropython"
           file "$BIN"
           "$BIN" test_wasm3.py
           "$BIN" test_wiring_apps.py --slow
@@ -309,7 +312,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: wasm3-usermod-windows-${{ matrix.arch_label }}
-          path: ${{ env.CIBMP_CACHE_PATH }}/micropython/${{ env.MPY_TAG }}/ports/windows/build-${{ matrix.identifier }}/micropython-wasm3.exe
+          path: ${{ env.CIBMP_CACHE_PATH }}/micropython/${{ env.MPY_TAG }}/ports/windows/build-${{ matrix.identifier }}/micropython.exe
           if-no-files-found: error
 
   # ── Windows, run (real Windows hosts) ─────────────────────────────────────
@@ -342,8 +345,8 @@ jobs:
 
       - name: Run tests (windows-${{ matrix.arch_label }})
         run: |
-          .\build\micropython-wasm3.exe tests\test_wasm3.py
-          .\build\micropython-wasm3.exe tests\test_wiring_apps.py --slow
+          .\build\micropython.exe tests\test_wasm3.py
+          .\build\micropython.exe tests\test_wiring_apps.py --slow
 
   # ── ports/webassembly: wasm3 compiled to wasm, run under node ─────────────
   # natmod cannot reach this port either — dynruntime.mk has no WASM ARCH, and
