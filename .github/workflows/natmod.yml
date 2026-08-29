@@ -75,7 +75,7 @@ jobs:
       - if: matrix.arch == 'x86'
         run: sudo apt-get update -q && sudo apt-get install -y gcc-multilib
 
-      - uses: ballistics-lab/cibuildmp@46808922ec7f92d591473410218a51b07b6a317c
+      - uses: ballistics-lab/cibuildmp@4c4b7d16bfd9eddebb29e0abfbbdc4c6bbdeef6f
         with:
           # `build`, not the retired CIBMP_MICROPYTHON/CIBMP_ARCHS env pair
           # (record 0052 dropped both -- there is no more separate
@@ -118,7 +118,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@46808922ec7f92d591473410218a51b07b6a317c
+      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@4c4b7d16bfd9eddebb29e0abfbbdc4c6bbdeef6f
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -232,7 +232,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@46808922ec7f92d591473410218a51b07b6a317c
+      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@4c4b7d16bfd9eddebb29e0abfbbdc4c6bbdeef6f
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -316,7 +316,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@46808922ec7f92d591473410218a51b07b6a317c
+      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@4c4b7d16bfd9eddebb29e0abfbbdc4c6bbdeef6f
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
@@ -367,7 +367,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@46808922ec7f92d591473410218a51b07b6a317c
+      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@4c4b7d16bfd9eddebb29e0abfbbdc4c6bbdeef6f
         with:
           mpy_tag: ${{ env.MPY_TAG }}
 
