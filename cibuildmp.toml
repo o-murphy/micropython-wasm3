@@ -79,3 +79,15 @@ extra-make-args = ["PROG=micropython-wasm3.exe"]
 [override."v1.28.0-manylinux_2_31_armv7l"]
 extra-make-args = ["LDFLAGS_EXTRA=-static"]
 inherit = { extra-make-args = "append" }
+
+# webassembly's own manifest problem: ports/webassembly has no boards/, only
+# variants/, so the plain top-level `manifest` above never pulls in the
+# pyscript variant's own default (variants/pyscript/manifest.py -- asyncio
+# plus a require() list of 24 stdlib/utility modules). usermod.yml's own
+# "Write combined FROZEN_MANIFEST" step generates the file this points at
+# fresh every run (include()-ing both the variant default and this project's
+# own usermod/manifest.py); relative to package-dir, same as `manifest`
+# above, and already covered by the usermod_mounts() bind mount since it
+# lands inside usermod/ like everything else `user-c-modules` mounts.
+[override."v1.28.0-wasm32"]
+manifest = "usermod/wasm_manifest.py"
