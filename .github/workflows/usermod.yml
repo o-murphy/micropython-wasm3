@@ -103,13 +103,6 @@ jobs:
         with:
           submodules: recursive
 
-      # cibuildmp installs no emulation itself (cibuildwheel's own rule);
-      # the job that wants it sets it up. Every leg here only ever builds
-      # what its own runner is already native to, so this is defensive
-      # rather than load-bearing -- same as cibuildmp's own build-examples.yml
-      # applies it uniformly across every usermod job, native legs included.
-      - uses: docker/setup-qemu-action@v4
-
       - name: Install the rp2040py emulator
         if: matrix.port == 'rp2'
         # The arm-none-eabi + CMake toolchain itself is cibuildmp's own
@@ -318,8 +311,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
-
-      - uses: docker/setup-qemu-action@v4
 
       - name: Build usermod (${{ matrix.identifier }})
         uses: ballistics-lab/cibuildmp@v0.5.0
