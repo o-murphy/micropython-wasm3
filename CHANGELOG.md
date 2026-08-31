@@ -45,6 +45,30 @@ build, `tests/`, `tools/`, `benchmarks/`).
   cross-checks that `tools/make_test_wasm.py` reproduces `simple.wasm`
   byte-for-byte.
 
+### Changed
+
+- **CI is off cibuildmp's legacy composite actions entirely.** That layer never
+  invokes the `cibuildmp` CLI — each action installs a toolchain by hand and
+  runs the port's own `make` — and is a permanent legacy fallback rather than a
+  second supported integration path (cibuildmp record 0073).
+  - `usermod.yml`'s `usermod-mipsel` job builds through the CLI like every
+    other row now, with `build: v1.28.0-manylinux_2_39_mipsel` (already listed
+    in this repo's own `cibuildmp.toml`). What used to justify holding it back
+    — record 0043 keeping mipsel on the vendored `MICROPY_STANDALONE=1`/
+    `deplibs` static-libffi path — is an argument the other way: cibuildmp's
+    own mipsel driver applies that path itself, gated per-arch in that same
+    source. Verified on the real artifact of `o-murphy/a7p`'s already-migrated
+    equivalent job, not inferred: `ELF 32-bit LSB executable, MIPS, MIPS32 rel2
+    ..., statically linked`. `qemu-user-static` is now an explicit apt step
+    (the tests still invoke `qemu-mipsel-static` by name rather than relying on
+    the binfmt registration), and the job reads cibuildmp's collected
+    `mpyhouse/<identifier>/` copy instead of `usermod/build/mipsel/`.
+  - `natmod.yml`'s four `fetch-micropython` uses are now the five-line
+    release-tarball fetch that action performed. None of those jobs runs a
+    cibuildmp step (all four consume the build job's artifact), so there is no
+    cibuildmp-resolved checkout to point at, and the tarball rather than a clone
+    is still what lets them skip `make submodules`.
+
 ### Fixed
 
 Found by loading a real-world module — a C++ build of `bclibc` compiled to

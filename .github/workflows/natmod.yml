@@ -75,7 +75,7 @@ jobs:
       - if: matrix.arch == 'x86'
         run: sudo apt-get update -q && sudo apt-get install -y gcc-multilib
 
-      - uses: ballistics-lab/cibuildmp@v0.4.1
+      - uses: ballistics-lab/cibuildmp@v0.5.0
         with:
           # `build`, not the retired CIBMP_MICROPYTHON/CIBMP_ARCHS env pair
           # (record 0052 dropped both -- there is no more separate
@@ -118,9 +118,27 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@9f30109cc178d5f0b5192850f3a78ae6edfe8b48
-        with:
-          mpy_tag: ${{ env.MPY_TAG }}
+      - name: Fetch MicroPython ${{ env.MPY_TAG }}
+        # A plain tarball fetch, not cibuildmp's own `fetch-micropython`
+        # composite action. That whole `.github/actions/*` layer never
+        # invokes the cibuildmp CLI at all -- it is a permanent legacy
+        # fallback, not a second supported way to use the project
+        # (cibuildmp record 0073) -- and what this one did is the five
+        # lines below, verbatim.
+        #
+        # No cibuildmp step runs in this job at all (it consumes the build
+        # job's artifact), so there is no cibuildmp-resolved checkout under
+        # $CIBMP_CACHE_PATH to point at the way usermod.yml's own jobs do.
+        #
+        # Still the release tarball rather than a git clone, for the reason
+        # the "No `make submodules` step" comment below already gives: it
+        # carries every port's vendored lib/ sources already.
+        run: |
+          VER="${MPY_TAG#v}"
+          wget -q "https://github.com/micropython/micropython/releases/download/$MPY_TAG/micropython-$VER.tar.xz" \
+            -O mpy.tar.xz
+          tar xf mpy.tar.xz && rm mpy.tar.xz
+          echo "MPY_DIR=$GITHUB_WORKSPACE/micropython-$VER" >> "$GITHUB_ENV"
 
       - name: Install unix build deps
         if: matrix.kind == 'unix'
@@ -232,9 +250,15 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@9f30109cc178d5f0b5192850f3a78ae6edfe8b48
-        with:
-          mpy_tag: ${{ env.MPY_TAG }}
+      - name: Fetch MicroPython ${{ env.MPY_TAG }}
+        # Same plain tarball fetch as the `test` job above, for the same
+        # reasons -- see that step's own comment.
+        run: |
+          VER="${MPY_TAG#v}"
+          wget -q "https://github.com/micropython/micropython/releases/download/$MPY_TAG/micropython-$VER.tar.xz" \
+            -O mpy.tar.xz
+          tar xf mpy.tar.xz && rm mpy.tar.xz
+          echo "MPY_DIR=$GITHUB_WORKSPACE/micropython-$VER" >> "$GITHUB_ENV"
 
       - name: Install the armhf cross toolchain
         run: |
@@ -316,9 +340,15 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@9f30109cc178d5f0b5192850f3a78ae6edfe8b48
-        with:
-          mpy_tag: ${{ env.MPY_TAG }}
+      - name: Fetch MicroPython ${{ env.MPY_TAG }}
+        # Same plain tarball fetch as the `test` job above, for the same
+        # reasons -- see that step's own comment.
+        run: |
+          VER="${MPY_TAG#v}"
+          wget -q "https://github.com/micropython/micropython/releases/download/$MPY_TAG/micropython-$VER.tar.xz" \
+            -O mpy.tar.xz
+          tar xf mpy.tar.xz && rm mpy.tar.xz
+          echo "MPY_DIR=$GITHUB_WORKSPACE/micropython-$VER" >> "$GITHUB_ENV"
 
       - name: Install QEMU and the ARM toolchain
         run: |
@@ -367,9 +397,15 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@9f30109cc178d5f0b5192850f3a78ae6edfe8b48
-        with:
-          mpy_tag: ${{ env.MPY_TAG }}
+      - name: Fetch MicroPython ${{ env.MPY_TAG }}
+        # Same plain tarball fetch as the `test` job above, for the same
+        # reasons -- see that step's own comment.
+        run: |
+          VER="${MPY_TAG#v}"
+          wget -q "https://github.com/micropython/micropython/releases/download/$MPY_TAG/micropython-$VER.tar.xz" \
+            -O mpy.tar.xz
+          tar xf mpy.tar.xz && rm mpy.tar.xz
+          echo "MPY_DIR=$GITHUB_WORKSPACE/micropython-$VER" >> "$GITHUB_ENV"
 
       - name: Install the ARM toolchain and emulator
         # libstdc++-arm-none-eabi-newlib is not optional here even though
