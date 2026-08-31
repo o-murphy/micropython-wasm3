@@ -129,7 +129,7 @@ jobs:
         # that exact value, leaks FROZEN_MANIFEST into the port's internal
         # mpy-cross sub-build via MAKEFLAGS), so the Run tests steps below
         # key on whichever this port's driver actually uses.
-        uses: ballistics-lab/cibuildmp@v0.4.2
+        uses: ballistics-lab/cibuildmp@fix/companions
         with:
           build: ${{ matrix.identifier }}
 
@@ -138,7 +138,7 @@ jobs:
         # No wasm3.mpy in tests/ -- it would shadow the frozen wasm3.py.
         run: |
           cd tests
-          BIN="$CIBMP_CACHE_PATH/micropython/$MPY_TAG/ports/unix/build-${{ matrix.identifier }}/micropython"
+          BIN="$GITHUB_WORKSPACE/mpyhouse/${{ matrix.identifier }}/micropython-${{ matrix.identifier }}"
           "$BIN" test_wasm3.py
           "$BIN" test_wiring_apps.py --slow
 
@@ -151,7 +151,7 @@ jobs:
         # usermod comment above.
         run: |
           python3 natmod/ci/run_rp2040py.py \
-            "$CIBMP_CACHE_PATH/micropython/$MPY_TAG/ports/rp2/build-RPI_PICO/firmware.uf2" . --no-mpy
+            "$GITHUB_WORKSPACE/mpyhouse/$MPY_TAG-rp2-RPI_PICO/firmware-$MPY_TAG-rp2-RPI_PICO.uf2" . --no-mpy
 
   # ── Cross-built unix: armhf on real hardware, mipsel under qemu-user ──────
   # Its own job rather than two more rows in the matrix above, because the
@@ -203,7 +203,7 @@ jobs:
         # comment: confirmed live (usermod run #58) that manylinux_2_31_armv7l's
         # own libc6-dev/libffi-dev already ship what a plain -static link
         # needs, no vendored libffi build required.
-        uses: ballistics-lab/cibuildmp@v0.4.2
+        uses: ballistics-lab/cibuildmp@fix/companions
         with:
           build: v1.28.0-manylinux_2_31_armv7l
 
@@ -214,7 +214,7 @@ jobs:
         # actually came out static.
         run: |
           cd tests
-          BIN="$CIBMP_CACHE_PATH/micropython/$MPY_TAG/ports/unix/build-v1.28.0-manylinux_2_31_armv7l/micropython"
+          BIN="$GITHUB_WORKSPACE/mpyhouse/v1.28.0-manylinux_2_31_armv7l/micropython-v1.28.0-manylinux_2_31_armv7l"
           file "$BIN"
           "$BIN" test_wasm3.py
           "$BIN" test_wiring_apps.py --slow
@@ -258,7 +258,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends qemu-user-static
 
       - name: Build usermod (${{ env.MPY_TAG }}-manylinux_2_39_mipsel)
-        uses: ballistics-lab/cibuildmp@v0.4.2
+        uses: ballistics-lab/cibuildmp@fix/companions
         with:
           build: ${{ env.MPY_TAG }}-manylinux_2_39_mipsel
 
@@ -268,10 +268,12 @@ jobs:
         # from this job's own previous recipe, so it still does not depend on
         # the runner image having that registration.
         #
-        # cibuildmp's collected copy, not the port's internal build tree: an
-        # identifier-qualified name, and the directory record 0070 made carry
-        # a binary's repaired lib/ sidecar where one is needed (not here --
-        # this link is static).
+        # cibuildmp's collected copy: an identifier-qualified name, and the
+        # directory record 0070 made carry a binary's repaired lib/ sidecar
+        # where one is needed (not here -- this link is static). This job
+        # was the first here to read that directory; every other row does
+        # now too, once cibuildmp record 0079 made it complete for the
+        # ports whose output is more than one file.
         run: |
           cd tests
           BIN="$GITHUB_WORKSPACE/mpyhouse/$MPY_TAG-manylinux_2_39_mipsel/micropython-$MPY_TAG-manylinux_2_39_mipsel"
@@ -320,14 +322,14 @@ jobs:
       - uses: docker/setup-qemu-action@v4
 
       - name: Build usermod (${{ matrix.identifier }})
-        uses: ballistics-lab/cibuildmp@v0.4.2
+        uses: ballistics-lab/cibuildmp@fix/companions
         with:
           build: ${{ matrix.identifier }}
 
       - uses: actions/upload-artifact@v7
         with:
           name: wasm3-usermod-windows-${{ matrix.arch_label }}
-          path: ${{ env.CIBMP_CACHE_PATH }}/micropython/${{ env.MPY_TAG }}/ports/windows/build-${{ matrix.identifier }}/micropython.exe
+          path: mpyhouse/${{ matrix.identifier }}/
           if-no-files-found: error
 
   # ── Windows, run (real Windows hosts) ─────────────────────────────────────
@@ -420,7 +422,7 @@ jobs:
           cat usermod/wasm_manifest.py
 
       - name: Build usermod (v1.28.0-wasm32)
-        uses: ballistics-lab/cibuildmp@v0.4.2
+        uses: ballistics-lab/cibuildmp@fix/companions
         with:
           build: v1.28.0-wasm32
 
@@ -431,16 +433,14 @@ jobs:
         # node itself read the script off the host. The runner prepends them
         # through the same _INJECTED hook the QEMU runner uses.
         run: |
-          MJS="$CIBMP_CACHE_PATH/micropython/$MPY_TAG/ports/webassembly/build-v1.28.0-wasm32/micropython.mjs"
+          MJS="$GITHUB_WORKSPACE/mpyhouse/v1.28.0-wasm32/micropython-v1.28.0-wasm32.mjs"
           python3 natmod/ci/run_wasm.py "$MJS" test_wasm3.py
           python3 natmod/ci/run_wasm.py "$MJS" test_wiring_apps.py --slow
 
       - uses: actions/upload-artifact@v7
         with:
           name: wasm3-usermod-webassembly
-          path: |
-            ${{ env.CIBMP_CACHE_PATH }}/micropython/${{ env.MPY_TAG }}/ports/webassembly/build-v1.28.0-wasm32/micropython.mjs
-            ${{ env.CIBMP_CACHE_PATH }}/micropython/${{ env.MPY_TAG }}/ports/webassembly/build-v1.28.0-wasm32/micropython.wasm
+          path: mpyhouse/v1.28.0-wasm32/
           if-no-files-found: error
 
   # ── ESP32, build-only ────────────────────────────────────────────────────
@@ -487,14 +487,12 @@ jobs:
         # clones ESP-IDF on the host and runs the actual build inside its own
         # Docker image -- no separate ESP-IDF-install step needed any more.
         # Same identifier a7p's own mp-usermod.yml already builds this way.
-        uses: ballistics-lab/cibuildmp@v0.4.2
+        uses: ballistics-lab/cibuildmp@fix/companions
         with:
           build: v1.28.0-esp32-ESP32_GENERIC
 
       - uses: actions/upload-artifact@v7
         with:
           name: wasm3-usermod-esp32
-          path: |
-            ${{ env.CIBMP_CACHE_PATH }}/micropython/${{ env.MPY_TAG }}/ports/esp32/build-ESP32_GENERIC/micropython.bin
-            ${{ env.CIBMP_CACHE_PATH }}/micropython/${{ env.MPY_TAG }}/ports/esp32/build-ESP32_GENERIC/firmware.bin
+          path: mpyhouse/v1.28.0-esp32-ESP32_GENERIC/
           if-no-files-found: error
