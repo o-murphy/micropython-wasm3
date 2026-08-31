@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **`mipsel` support (usermod, `unix-mipsel`).** Debian 13 "Trixie" dropped the
+  mipsel port outright — no `gcc-mipsel-linux-gnu`/`libc6-dev-mipsel-cross` in
+  its archive — so cibuildmp's own `manylinux_2_39_mipsel` image (which this
+  project's `usermod-mipsel` job below built against) has no upstream
+  cross-toolchain left to rebuild from (cibuildmp record 0068). A dead
+  platform, not a maintenance choice: `usermod.yml`'s `usermod-mipsel` job,
+  `cibuildmp.toml`'s `v1.28.0-manylinux_2_39_mipsel` entry, and every mipsel
+  row/mention in `README.md`'s status tables are gone. The `### Added`/
+  `### Changed` entries below that describe how that job came to be built
+  stay as-is — historical record of a real target this project supported,
+  not a claim about what it supports today.
+
 ### Added
 
 Initial project scaffold: Wasm3 as a MicroPython module, in the same layout

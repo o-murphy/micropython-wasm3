@@ -146,16 +146,15 @@ jobs:
           python3 natmod/ci/run_rp2040py.py \
             "$GITHUB_WORKSPACE/mpyhouse/$MPY_TAG-rp2-RPI_PICO/firmware-$MPY_TAG-rp2-RPI_PICO.uf2" . --no-mpy
 
-  # ── Cross-built unix: armhf on real hardware, mipsel under qemu-user ──────
-  # Its own job rather than two more rows in the matrix above, because the
+  # ── Cross-built unix: armhf on real hardware ──────────────────────────────
+  # Its own job rather than another row in the matrix above, because the
   # recipe genuinely differs: a static link and libffi built from source as a
-  # separate `deplibs` pass. a7p splits these out the same way, for the same
+  # separate `deplibs` pass. a7p splits this out the same way, for the same
   # reason.
   #
-  # Both are natmod-unreachable in the same sense aarch64 is: dynruntime.mk's
-  # arm ARCHes are bare-metal EABI, not the Linux ABI, and there is no mips
-  # ARCH at all. So this is the case the usermod half exists for, not a
-  # duplicate of natmod coverage.
+  # natmod-unreachable in the same sense aarch64 is: dynruntime.mk's arm
+  # ARCHes are bare-metal EABI, not the Linux ABI. So this is the case the
+  # usermod half exists for, not a duplicate of natmod coverage.
   #
   # armhf no longer runs under qemu. The probe job that used to live at the
   # bottom of this file measured it directly: a statically linked, freestanding
@@ -163,8 +162,7 @@ jobs:
   # binfmt handler ("RESULT: AArch32 IS supported on this runner", usermod run
   # #18). So the arm64 runner cross-builds the 32-bit binary and then runs it
   # on its own CPU -- a real execution test on real hardware, where before it
-  # was an interpreter's opinion of one. mipsel keeps qemu-user: GitHub has no
-  # mips runner and never will.
+  # was an interpreter's opinion of one.
   #
   # That move is also why armhf switched from gnueabi to gnueabihf, departing
   # from upstream's own tools/ci.sh (ci_unix_qemu_arm_* uses gnueabi). Under
@@ -174,13 +172,18 @@ jobs:
   # survive only through the kernel's opt-in ARMV8_DEPRECATED emulation. The
   # probe binary was built with gnueabihf, so that is the toolchain actually
   # proven here; it is also what "armhf" has always named in this matrix, so
-  # the row is now honest about what it builds. mipsel is untouched.
-  # armhf split off into its own job (unified CLI, below): unlike mipsel it
-  # is not a cross-compile any more (manylinux_2_31_armv7l is native to
+  # the row is now honest about what it builds.
+  # armhf split off into its own job (unified CLI, below): it is not a
+  # cross-compile any more (manylinux_2_31_armv7l is native to
   # ubuntu-24.04-arm, record 0044) and cibuildmp.toml's own override now
-  # carries the static-link flag directly, so it no longer shares a recipe
-  # with mipsel at all -- see that job's own header for why it stays on the
-  # old composite action.
+  # carries the static-link flag directly -- see that job's own header for
+  # why it stays on the old composite action.
+  #
+  # mipsel used to have its own job here (qemu-user, GitHub has no mips
+  # runner). Removed: Debian 13 "Trixie" dropped the mipsel port outright
+  # (cibuildmp record 0068), so the cross-toolchain this job's own
+  # `manylinux_2_39_mipsel` image depended on has no upstream to rebuild
+  # from any more -- a dead platform, not a maintenance choice.
   usermod-armhf:
     name: build + test (unix-armhf, static)
     runs-on: ubuntu-24.04-arm
@@ -211,68 +214,6 @@ jobs:
           file "$BIN"
           "$BIN" test_wasm3.py
           "$BIN" test_wiring_apps.py --slow
-
-  # mipsel keeps its own job -- GitHub has no mips runner, so this is still a
-  # genuine cross-compile (unlike armhf above) and it needs a qemu-user
-  # binary no other row does -- but it is on the cibuildmp CLI like every
-  # other row now, not the `build-usermod-unix` composite action. That layer
-  # never invokes cibuildmp at all and is a permanent legacy fallback rather
-  # than a second supported integration path (cibuildmp record 0073); this
-  # job and natmod.yml's four `fetch-micropython` uses were the last things
-  # here still reaching into it.
-  #
-  # What used to justify holding this row back was record 0043 keeping mipsel
-  # on the vendored MICROPY_STANDALONE=1/deplibs static-libffi path ("no
-  # cross-usable libffi was available", build_unix.py's own
-  # UNIX_ARCH_SETTINGS). That is an argument the other way round: cibuildmp's
-  # own mipsel driver applies that path itself, gated per-arch in that same
-  # source, so the CLI produces the identical static binary this job wants --
-  # and -static here is a deployability requirement, not a CI convenience
-  # (the target is minimal embedded Linux boards with no assumable
-  # ld.so/libc; micropython/micropython#17456). Verified on the real artifact
-  # rather than inferred, in o-murphy/a7p's own already-migrated mipsel job:
-  # `ELF 32-bit LSB executable, MIPS, MIPS32 rel2 ..., statically linked`,
-  # with the libffi deplibs step visible in its build log.
-  usermod-mipsel:
-    name: build + test (unix-mipsel, static)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: recursive
-
-      - name: Install qemu-user-static
-        # What the composite action did for this arch. The apt package, not
-        # docker/setup-qemu-action: "Run tests" below needs the
-        # `qemu-mipsel-static` binary on PATH to invoke explicitly, which a
-        # container-scoped binfmt registration does not provide at all.
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y --no-install-recommends qemu-user-static
-
-      - name: Build usermod (${{ env.MPY_TAG }}-manylinux_2_39_mipsel)
-        uses: ballistics-lab/cibuildmp@v0.5.0
-        with:
-          build: ${{ env.MPY_TAG }}-manylinux_2_39_mipsel
-
-      - name: Run tests
-        # `qemu-mipsel-static` invoked explicitly rather than relying on the
-        # binfmt_misc registration the apt package also installs -- unchanged
-        # from this job's own previous recipe, so it still does not depend on
-        # the runner image having that registration.
-        #
-        # cibuildmp's collected copy: an identifier-qualified name, and the
-        # directory record 0070 made carry a binary's repaired lib/ sidecar
-        # where one is needed (not here -- this link is static). This job
-        # was the first here to read that directory; every other row does
-        # now too, once cibuildmp record 0079 made it complete for the
-        # ports whose output is more than one file.
-        run: |
-          cd tests
-          BIN="$GITHUB_WORKSPACE/mpyhouse/$MPY_TAG-manylinux_2_39_mipsel/micropython-$MPY_TAG-manylinux_2_39_mipsel"
-          file "$BIN"
-          qemu-mipsel-static "$BIN" test_wasm3.py
-          qemu-mipsel-static "$BIN" test_wiring_apps.py --slow
 
   # ── Windows, build (Linux, cross-compiled) ────────────────────────────────
   # The one target where natmod is not merely absent but impossible for a
@@ -364,7 +305,7 @@ jobs:
       - name: Run tests (windows-${{ matrix.arch_label }})
         # cd tests first: test_wasm3.py/test_wiring_apps.py's own read()
         # opens fixtures (wasm/add.wasm etc.) by a path relative to CWD, not
-        # to the script -- same reason the unix/mipsel jobs cd there too.
+        # to the script -- same reason the unix job cds there too.
         # Live-caught here without it: OSError ENOENT on every fixture.
         run: |
           cd tests
@@ -374,7 +315,7 @@ jobs:
   # ── ports/webassembly: wasm3 compiled to wasm, run under node ─────────────
   # natmod cannot reach this port either — dynruntime.mk has no WASM ARCH, and
   # the mechanism is architecturally different anyway. So, like aarch64,
-  # armhf, mipsel and Windows, this is a target usermod is the only route to.
+  # armhf and Windows, this is a target usermod is the only route to.
   #
   # It is also the odd one conceptually: an interpreter for wasm, itself
   # compiled to wasm. That is a real configuration — wasm3 upstream supports

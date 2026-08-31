@@ -17,11 +17,11 @@ Two integration modes, same Python API:
 | Approach               | Location   | Selected by | Covered in CI                                        | Deployment                           |
 | ---------------------- | ---------- | ----------- | ---------------------------------------------------- | ------------------------------------ |
 | **natmod** (`.mpy`)    | `natmod/`  | `ARCH`      | all 10 `dynruntime.mk` ARCHes                        | Copy `.mpy` to the device filesystem |
-| **usermod** (baked in) | `usermod/` | port        | `unix`, `windows`, `webassembly`, `rp2` — 10 targets | Built into firmware — no file to copy |
+| **usermod** (baked in) | `usermod/` | port        | `unix`, `windows`, `webassembly`, `rp2` — 9 targets | Built into firmware — no file to copy |
 
 A natmod reaches only the architectures `py/dynruntime.mk` knows about; a
 usermod reaches any port with `USER_C_MODULES`, which is how aarch64, armhf,
-mipsel, Windows and wasm are covered at all. See [Status](#status) for the
+Windows and wasm are covered at all. See [Status](#status) for the
 per-target results and for the ports still out of reach.
 
 Unlike `micropython-bclibc`, whose layout this repository follows, there is
@@ -132,7 +132,6 @@ which is a different claim entirely.
 | `unix`            | x64, x86                          | 51/51 ✅ each      |
 | `unix`            | aarch64 (native runner)           | 51/51 ✅           |
 | `unix`            | armhf (static, real AArch32)      | 51/51 ✅           |
-| `unix`            | mipsel (static, qemu-user)        | 51/51 ✅           |
 | `windows`         | x64, x86 (WOW64), arm64           | 51/51 ✅ each      |
 | `webassembly`     | wasm, under node                  | 51/51 ✅           |
 | `rp2`             | `RPI_PICO`, on rp2040py           | 20/20 ✅           |
@@ -142,9 +141,12 @@ which is a different claim entirely.
 | `stm32`, `samd`, `nrf`, `alif`, `zephyr`, `cc3200` | — | no C heap |
 | `mimxrt`, `renesas-ra` | —                            | plausible, untried |
 
-Ten targets across six ports. Every one of them runs the suites — there is
-no build-only row here, unlike the natmod table. Nine of the ten now run on
-real hardware; only mipsel is emulated, because GitHub has no mips runner.
+Nine targets across six ports. Every one of them runs the suites — there is
+no build-only row here, unlike the natmod table. All nine now run on real
+hardware — mipsel was the only emulated one (qemu-user, GitHub has no mips
+runner) and it is gone: Debian 13 "Trixie" dropped the mipsel port outright,
+so the cross-toolchain cibuildmp's own `manylinux_2_39_mipsel` image needs
+has no upstream to rebuild from any more (cibuildmp record 0068).
 
 armhf moved off qemu in usermod run #19 and stayed green: `ubuntu-24.04-arm`
 executes 32-bit ARM directly — measured on the runner itself, not assumed
@@ -175,7 +177,7 @@ emulator involved at all.
 
 ### Not done: musl for the static unix builds
 
-The `armhf` and `mipsel` rows link `-static` against glibc, and glibc emits two
+The `armhf` row links `-static` against glibc, and glibc emits two
 warnings on every such link:
 
 ```
