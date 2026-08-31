@@ -219,14 +219,27 @@ jobs:
           "$BIN" test_wasm3.py
           "$BIN" test_wiring_apps.py --slow
 
-  # mipsel stays on the old composite action -- deliberately, not merely
-  # unmigrated. GitHub has no mips runner, so this is still a genuine
-  # cross-compile (unlike armhf above), and record 0043 (cibuildmp) kept
-  # mipsel on the vendored MICROPY_STANDALONE=1/deplibs static-libffi path
-  # for exactly that reason ("no cross-usable libffi was available",
-  # build_unix.py's own UNIX_ARCH_SETTINGS) -- there is no native
-  # manylinux_2_39_mipsel host image to try the armhf row's own no-deplibs
-  # shortcut against. Only the action ref is bumped here, not the recipe.
+  # mipsel keeps its own job -- GitHub has no mips runner, so this is still a
+  # genuine cross-compile (unlike armhf above) and it needs a qemu-user
+  # binary no other row does -- but it is on the cibuildmp CLI like every
+  # other row now, not the `build-usermod-unix` composite action. That layer
+  # never invokes cibuildmp at all and is a permanent legacy fallback rather
+  # than a second supported integration path (cibuildmp record 0073); this
+  # job and natmod.yml's four `fetch-micropython` uses were the last things
+  # here still reaching into it.
+  #
+  # What used to justify holding this row back was record 0043 keeping mipsel
+  # on the vendored MICROPY_STANDALONE=1/deplibs static-libffi path ("no
+  # cross-usable libffi was available", build_unix.py's own
+  # UNIX_ARCH_SETTINGS). That is an argument the other way round: cibuildmp's
+  # own mipsel driver applies that path itself, gated per-arch in that same
+  # source, so the CLI produces the identical static binary this job wants --
+  # and -static here is a deployability requirement, not a CI convenience
+  # (the target is minimal embedded Linux boards with no assumable
+  # ld.so/libc; micropython/micropython#17456). Verified on the real artifact
+  # rather than inferred, in o-murphy/a7p's own already-migrated mipsel job:
+  # `ELF 32-bit LSB executable, MIPS, MIPS32 rel2 ..., statically linked`,
+  # with the libffi deplibs step visible in its build log.
   usermod-mipsel:
     name: build + test (unix-mipsel, static)
     runs-on: ubuntu-latest
@@ -235,31 +248,33 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ballistics-lab/cibuildmp/.github/actions/fetch-micropython@9f30109cc178d5f0b5192850f3a78ae6edfe8b48
-        with:
-          mpy_tag: ${{ env.MPY_TAG }}
+      - name: Install qemu-user-static
+        # What the composite action did for this arch. The apt package, not
+        # docker/setup-qemu-action: "Run tests" below needs the
+        # `qemu-mipsel-static` binary on PATH to invoke explicitly, which a
+        # container-scoped binfmt registration does not provide at all.
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends qemu-user-static
 
-      - name: Build usermod firmware (mipsel, static)
-        # -static is a deployability requirement, not a CI convenience: this
-        # target is minimal embedded Linux boards that cannot be assumed to
-        # have a matching ld.so/libc. Same reasoning as
-        # micropython/micropython#17456. Toolchain/qemu install, mpy-cross,
-        # deplibs and the main build all come from the action; build_dir
-        # defaults to exactly usermod/build/mipsel, matching what Run tests
-        # below already expects.
-        uses: ballistics-lab/cibuildmp/.github/actions/build-usermod-unix@9f30109cc178d5f0b5192850f3a78ae6edfe8b48
+      - name: Build usermod (${{ env.MPY_TAG }}-manylinux_2_39_mipsel)
+        uses: ballistics-lab/cibuildmp@v0.4.1
         with:
-          arch: mipsel
+          build: ${{ env.MPY_TAG }}-manylinux_2_39_mipsel
 
       - name: Run tests
-        # qemu-mipsel-static itself comes from the action's own "Install
-        # qemu-user-static" step (mipsel-only, action.yml), already run by
-        # the time this step starts -- invoked explicitly here rather than
-        # relying on its binfmt_misc registration, so the job does not
-        # depend on the runner image having that registration.
+        # `qemu-mipsel-static` invoked explicitly rather than relying on the
+        # binfmt_misc registration the apt package also installs -- unchanged
+        # from this job's own previous recipe, so it still does not depend on
+        # the runner image having that registration.
+        #
+        # cibuildmp's collected copy, not the port's internal build tree: an
+        # identifier-qualified name, and the directory record 0070 made carry
+        # a binary's repaired lib/ sidecar where one is needed (not here --
+        # this link is static).
         run: |
           cd tests
-          BIN="$GITHUB_WORKSPACE/usermod/build/mipsel/micropython"
+          BIN="$GITHUB_WORKSPACE/mpyhouse/$MPY_TAG-manylinux_2_39_mipsel/micropython-$MPY_TAG-manylinux_2_39_mipsel"
           file "$BIN"
           qemu-mipsel-static "$BIN" test_wasm3.py
           qemu-mipsel-static "$BIN" test_wiring_apps.py --slow
