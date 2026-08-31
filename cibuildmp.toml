@@ -31,9 +31,12 @@
 # natmod: every arch dynruntime.mk supports, one MicroPython tag (unchanged
 # from the old [natmod] table's own archs= list).
 #
-# usermod: unix x64/x86/aarch64 (manylinux, glibc), unix armhf/mipsel
+# usermod: unix x64/x86/aarch64 (manylinux, glibc), unix armhf
 # (usermod-cross), windows all three arches, webassembly, esp32
 # ESP32_GENERIC, rp2 RPI_PICO -- every port/arch usermod.yml already builds.
+# mipsel dropped: Debian 13 "Trixie" removed the mipsel port outright, so
+# cibuildmp's own manylinux_2_39_mipsel image has no upstream cross-toolchain
+# left to rebuild from (cibuildmp record 0068) -- a dead platform.
 # No qemu-MPS2_AN385 identifier here: unlike a7p, this repo's own QEMU
 # coverage (natmod.yml's test-armv7m) loads a natmod .mpy into a firmware
 # built by hand, not a usermod compiled in via cibuildmp's own qemu driver
@@ -42,7 +45,7 @@
 build = """
 mpy*-v1.28.0-*
 v1.28.0-manylinux_2_28_x86_64 v1.28.0-manylinux_2_28_i686 v1.28.0-manylinux_2_28_aarch64
-v1.28.0-manylinux_2_31_armv7l v1.28.0-manylinux_2_39_mipsel
+v1.28.0-manylinux_2_31_armv7l
 v1.28.0-win32 v1.28.0-win_amd64 v1.28.0-win_arm64
 v1.28.0-wasm32
 v1.28.0-esp32-ESP32_GENERIC
