@@ -129,7 +129,7 @@ jobs:
         # that exact value, leaks FROZEN_MANIFEST into the port's internal
         # mpy-cross sub-build via MAKEFLAGS), so the Run tests steps below
         # key on whichever this port's driver actually uses.
-        uses: ballistics-lab/cibuildmp@fix/companions
+        uses: ballistics-lab/cibuildmp@0.5.0
         with:
           build: ${{ matrix.identifier }}
 
@@ -203,7 +203,7 @@ jobs:
         # comment: confirmed live (usermod run #58) that manylinux_2_31_armv7l's
         # own libc6-dev/libffi-dev already ship what a plain -static link
         # needs, no vendored libffi build required.
-        uses: ballistics-lab/cibuildmp@fix/companions
+        uses: ballistics-lab/cibuildmp@0.5.0
         with:
           build: v1.28.0-manylinux_2_31_armv7l
 
@@ -258,7 +258,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends qemu-user-static
 
       - name: Build usermod (${{ env.MPY_TAG }}-manylinux_2_39_mipsel)
-        uses: ballistics-lab/cibuildmp@fix/companions
+        uses: ballistics-lab/cibuildmp@0.5.0
         with:
           build: ${{ env.MPY_TAG }}-manylinux_2_39_mipsel
 
@@ -322,7 +322,7 @@ jobs:
       - uses: docker/setup-qemu-action@v4
 
       - name: Build usermod (${{ matrix.identifier }})
-        uses: ballistics-lab/cibuildmp@fix/companions
+        uses: ballistics-lab/cibuildmp@0.5.0
         with:
           build: ${{ matrix.identifier }}
 
@@ -430,7 +430,7 @@ jobs:
           cat usermod/wasm_manifest.py
 
       - name: Build usermod (v1.28.0-wasm32)
-        uses: ballistics-lab/cibuildmp@fix/companions
+        uses: ballistics-lab/cibuildmp@0.5.0
         with:
           build: v1.28.0-wasm32
 
@@ -495,7 +495,7 @@ jobs:
         # clones ESP-IDF on the host and runs the actual build inside its own
         # Docker image -- no separate ESP-IDF-install step needed any more.
         # Same identifier a7p's own mp-usermod.yml already builds this way.
-        uses: ballistics-lab/cibuildmp@fix/companions
+        uses: ballistics-lab/cibuildmp@0.5.0
         with:
           build: v1.28.0-esp32-ESP32_GENERIC
 
