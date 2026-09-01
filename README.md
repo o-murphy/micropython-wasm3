@@ -402,14 +402,15 @@ need the chain flattened, not more memory.
 
 ### Measured on RP2350
 
-`RPI_PICO2` builds, and with tail calls it builds too — both through
-`cibuildmp` on the toolchain above, `v1.28.0`:
+`RPI_PICO2` builds, and with tail calls it builds too; `RPI_PICO2_W` builds
+too — all three through `cibuildmp` on the toolchain above, `v1.28.0`:
 
-| build                                     | firmware | note |
-| ----------------------------------------- | -------- | ---- |
-| `RPI_PICO` (RP2040, Cortex-M0+)           | 887808 B | the baseline this README describes |
-| `RPI_PICO2` (RP2350, Cortex-M33), stock   | 860160 B | first build of this module for RP2350 |
-| `RPI_PICO2` + `M3_HAS_TAIL_CALL=1`        | 861184 B | +1024 B; compiles and links |
+| build                                     | firmware  | note |
+| ----------------------------------------- | --------- | ---- |
+| `RPI_PICO` (RP2040, Cortex-M0+)           | 887808 B  | the baseline this README describes |
+| `RPI_PICO2` (RP2350, Cortex-M33), stock   | 860160 B  | first build of this module for RP2350 |
+| `RPI_PICO2` + `M3_HAS_TAIL_CALL=1`        | 861184 B  | +1024 B; compiles and links |
+| `RPI_PICO2_W` (RP2350, cyw43 wifi), stock | 1861120 B | roughly 2x `RPI_PICO2` -- the wifi/BT stack (cyw43, lwip, mbedtls) this board bakes in by default, not this module |
 
 **These are build results, not test results.** Nothing here has run the suites
 on RP2350: `rp2040py` emulates RP2040 only (`--board {pico,pico_w}` on every
