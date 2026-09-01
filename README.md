@@ -135,17 +135,20 @@ which is a different claim entirely.
 | `windows`         | x64, x86 (WOW64), arm64           | 51/51 ✅ each      |
 | `webassembly`     | wasm, under node                  | 51/51 ✅           |
 | `rp2`             | `RPI_PICO`, on rp2040py           | 20/20 ✅           |
-| `rp2`             | `RPI_PICO2` (RP2350), build-only  | builds ✅, see below |
+| `rp2`             | `RPI_PICO2`/`RPI_PICO2_W` (RP2350), build-only | builds ✅, see below |
 | `qemu`            | armv7m                            | blocked, see below |
 | `esp32`           | `ESP32_GENERIC`, build-only       | builds ✅, see below |
 | `esp8266`         | —                                 | unsafe, see below  |
 | `stm32`, `samd`, `nrf`, `alif`, `zephyr`, `cc3200` | — | no C heap |
 | `mimxrt`, `renesas-ra` | —                            | plausible, untried |
 
-Ten targets across six ports. Nine of them run the suites; `RPI_PICO2` is the
-one build-only row, and it is build-only for a reason no work here can fix —
-`rp2040py` emulates RP2040 only and no runner has an RP2350, so there is
-nothing to execute an RP2350 image on. See "Measured on RP2350". All nine now run on real
+Eleven targets across six ports. Nine of them run the suites; `RPI_PICO2` and
+`RPI_PICO2_W` are the two build-only rows, and that is for a reason no work
+here can fix — `rp2040py` emulates RP2040 only and no runner has an RP2350
+(QEMU has no RP2350 machine either, checked directly:
+gitlab.com/qemu-project/qemu/-/work_items/3125 is an open feature request,
+not something shipped), so there is nothing to execute an RP2350 image on.
+See "Measured on RP2350". All nine executable targets run on real
 hardware — mipsel was the only emulated one (qemu-user, GitHub has no mips
 runner) and it is gone: Debian 13 "Trixie" dropped the mipsel port outright,
 so the cross-toolchain cibuildmp's own `manylinux_2_39_mipsel` image needs
