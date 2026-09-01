@@ -135,14 +135,20 @@ which is a different claim entirely.
 | `windows`         | x64, x86 (WOW64), arm64           | 51/51 ✅ each      |
 | `webassembly`     | wasm, under node                  | 51/51 ✅           |
 | `rp2`             | `RPI_PICO`, on rp2040py           | 20/20 ✅           |
+| `rp2`             | `RPI_PICO2`/`RPI_PICO2_W` (RP2350), build-only | builds ✅, see below |
 | `qemu`            | armv7m                            | blocked, see below |
 | `esp32`           | `ESP32_GENERIC`, build-only       | builds ✅, see below |
 | `esp8266`         | —                                 | unsafe, see below  |
 | `stm32`, `samd`, `nrf`, `alif`, `zephyr`, `cc3200` | — | no C heap |
 | `mimxrt`, `renesas-ra` | —                            | plausible, untried |
 
-Nine targets across six ports. Every one of them runs the suites — there is
-no build-only row here, unlike the natmod table. All nine now run on real
+Eleven targets across six ports. Nine of them run the suites; `RPI_PICO2` and
+`RPI_PICO2_W` are the two build-only rows, and that is for a reason no work
+here can fix — `rp2040py` emulates RP2040 only and no runner has an RP2350
+(QEMU has no RP2350 machine either, checked directly:
+gitlab.com/qemu-project/qemu/-/work_items/3125 is an open feature request,
+not something shipped), so there is nothing to execute an RP2350 image on.
+See "Measured on RP2350". All nine executable targets run on real
 hardware — mipsel was the only emulated one (qemu-user, GitHub has no mips
 runner) and it is gone: Debian 13 "Trixie" dropped the mipsel port outright,
 so the cross-toolchain cibuildmp's own `manylinux_2_39_mipsel` image needs
@@ -338,7 +344,7 @@ firmware people already have. What was tried:
 | -------------------------------------------- | ------------------------------- |
 | `-O2` instead of `-Os`                        | 17/20, +17 KB of text            |
 | explicit `-foptimize-sibling-calls`           | 17/20, byte-identical output — already on |
-| `M3_HAS_TAIL_CALL=1`                          | no effect: `musttail` needs GCC 15, arm-none-eabi is 13 |
+| `M3_HAS_TAIL_CALL=1`                          | impossible on this core — see below |
 | running the interpreter on a heap stack       | not possible from a `.mpy` (below) |
 | `PICO_STACK_SIZE` past `SCRATCH_Y`            | fails to link, 4 KB bank         |
 
@@ -369,12 +375,71 @@ the call depth of AssemblyScript's or C++'s output, or the footprint of
 Rust's, needs a part with a bigger stack: armv7m clears all of it (49/49
 under QEMU).
 
+**`M3_HAS_TAIL_CALL=1` will never work on RP2040, and the reason is the core,
+not the toolchain.** This table used to say "`musttail` needs GCC 15,
+arm-none-eabi is 13". Both halves are now wrong: the toolchain cibuildmp
+builds this with (`ghcr.io/ballistics-lab/arm_embedded`) pins arm-none-eabi
+**GCC 15.2.1**, `__has_attribute(musttail)` is true there — and it still fails,
+with a different and final reason:
+
+```
+cortex-m0plus: cannot tail-call: machine description does not have
+               a sibcall_epilogue instruction pattern
+cortex-m33:    OK
+cortex-m55:    OK
+```
+
+GCC's ARMv6-M backend has no sibling-call epilogue at all, so no compiler
+version will ever unblock this. That matters because the old wording pointed at
+"wait for a newer toolchain", which is a dead end — what is *not* a dead end is
+a core that has the pattern.
+
 What would actually help, in order of effort: build it as a `usermod`, so the
-text executes from flash instead of occupying half the heap; or a toolchain
-with working `musttail` — GCC gained it in 15, and arm-none-eabi 13 has no
-such attribute, so `M3_HAS_TAIL_CALL=1` currently changes nothing there.
-Either way the deep-call-graph blobs need the dispatch chain flattened, not
-more memory.
+text executes from flash instead of occupying half the heap; or move to a
+Cortex-M33/M55 part, where `musttail` compiles and the dispatch chain stops
+growing the native stack per wasm call. Either way the deep-call-graph blobs
+need the chain flattened, not more memory.
+
+### Measured on RP2350
+
+`RPI_PICO2` builds, and with tail calls it builds too; `RPI_PICO2_W` builds
+too — all three through `cibuildmp` on the toolchain above, `v1.28.0`:
+
+| build                                     | firmware  | note |
+| ----------------------------------------- | --------- | ---- |
+| `RPI_PICO` (RP2040, Cortex-M0+)           | 887808 B  | the baseline this README describes |
+| `RPI_PICO2` (RP2350, Cortex-M33), stock   | 860160 B  | first build of this module for RP2350 |
+| `RPI_PICO2` + `M3_HAS_TAIL_CALL=1`        | 861184 B  | +1024 B; compiles and links |
+| `RPI_PICO2_W` (RP2350, cyw43 wifi), stock | 1861120 B | roughly 2x `RPI_PICO2` -- the wifi/BT stack (cyw43, lwip, mbedtls) this board bakes in by default, not this module |
+
+**These are build results, not test results.** Nothing here has run the suites
+on RP2350: `rp2040py` emulates RP2040 only (`--board {pico,pico_w}` on every
+subcommand, and it pins Kaluma 1.2.1 precisely because 1.3.0+ ships `pico2`
+images it cannot run), so the blob suite on RP2350 needs real hardware.
+
+QEMU's `MPS3_AN547` (Cortex-M55) looked like a way around that — an ARMv8-M
+core where `musttail` compiles, already a cibuildmp `qemu` target, no hardware
+needed. It is not: a `usermod` on `ports/qemu` does not link at all, for the
+reason this README already gives two sections down (no C heap, no knob to add
+one). Tried, so it is no longer a guess — `undefined reference to 'free'` and
+`'realloc'`, same as predicted. Whether flattening the dispatch chain clears
+the four failing blobs is therefore still open, and RP2350 hardware is the
+shortest way to close it.
+
+Two traps found while measuring this, both worth knowing before repeating it:
+
+- **Do not pass `-DCMAKE_C_FLAGS=…`** (via `extra-cmake-args` or otherwise) to
+  add a define. Setting that variable on the command line pre-seeds the cache,
+  so pico-sdk's own toolchain file never applies its `CMAKE_C_FLAGS_INIT`
+  (`-mcpu=cortex-m33 -mthumb`), and the build dies in the SDK with
+  `no SW_SPIN_LOCK_LOCK available for PICO_USE_SW_SPIN_LOCK on this platform`.
+  Confirmed to be the variable and not its contents: a harmless
+  `-DHARMLESS_PROBE=1` fails identically. Put the define in the module's own
+  `target_compile_options` instead, which is where the measurement above got it.
+- **`ports/rp2/Makefile` runs `cmake` only when the build directory is absent**
+  (`[ -e $(BUILD)/Makefile ] || cmake …`). Change a cmake argument without
+  deleting `build-<BOARD>/` and it silently does not apply: the build "succeeds"
+  in about a second and produces a byte-identical firmware.
 
 The one arch that needed a fix beyond the toolchain was `xtensa` (ESP8266):
 its older GCC raises a false `-Wmaybe-uninitialized` inside wasm3's
@@ -427,7 +492,12 @@ Known limitations:
   fault inside `wasm3.Module()`; build with `-DMICROPY_C_HEAP_SIZE=131072`.
   A natmod is unaffected — `src/libc_shim.c` routes it at the GC heap.
   `ports/qemu` looks worse than rp2 here: it has neither a C heap nor a knob
-  to give it one, so a usermod there is likely blocked outright (untried).
+  to give it one, so a usermod there is blocked outright — **tried now**, on
+  `MPS3_AN547` (Cortex-M55) with arm-none-eabi 15.2.1, and it fails exactly
+  where the bullet above predicts: `undefined reference to 'free'` and
+  `'realloc'` out of `m3_core.o`, plus `dangerous relocation: unsupported
+  relocation` on the same symbols. The core makes no difference; the missing
+  C heap does.
 - Globals, WASI and the reference-types/table APIs are not exposed yet.
 
 ---
