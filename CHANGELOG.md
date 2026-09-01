@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **README's RP2040 tail-call verdict, corrected and measured.** The
+  "what was tried" table said `M3_HAS_TAIL_CALL=1` has "no effect: `musttail`
+  needs GCC 15, arm-none-eabi is 13". Both halves are stale: the toolchain
+  cibuildmp builds this with pins arm-none-eabi **GCC 15.2.1** and
+  `__has_attribute(musttail)` is true there. It still fails, for a reason that
+  is final rather than temporary — GCC's ARMv6-M backend has no
+  `sibcall_epilogue` pattern at all (`cortex-m0plus` fails, `cortex-m33` and
+  `cortex-m55` compile). The old wording pointed at "wait for a newer
+  toolchain", which is a dead end; the new one points at a core that has the
+  pattern.
+
+- **`RPI_PICO2` (RP2350) added to `cibuildmp.toml` and the `usermod` matrix**,
+  alongside `RPI_PICO` and not instead of it. It is the one build-only row in
+  that matrix, carried on a `build_only: true` matrix flag that gates both the
+  emulator install and the test step — `rp2040py` emulates RP2040 only, and no
+  runner has an RP2350, so there is nothing to execute the image on. What the
+  row buys is a real ARMv8-M compile of this module, a different core and a
+  different pico-sdk platform layer from `RPI_PICO`.
+
+- **`ports/qemu` as a usermod: tried, and blocked outright.** README carried
+  this as "likely blocked outright (untried)". Now tried, on `MPS3_AN547`
+  (Cortex-M55) with arm-none-eabi 15.2.1: it fails at link exactly where the
+  README's own C-heap bullet predicts — `undefined reference to 'free'` and
+  `'realloc'` from `m3_core.o`, plus `dangerous relocation: unsupported
+  relocation`. The core is irrelevant; the missing C heap is the wall. This
+  also closes off the idea of using QEMU's ARMv8-M board to test a tail-call
+  build without hardware.
+
+- **First RP2350 build results, in README.** `RPI_PICO2` builds (860160 B), and
+  builds with `M3_HAS_TAIL_CALL=1` too (861184 B, +1024 B), against `v1.28.0`
+  through cibuildmp. Recorded as **build** results, not test results: nothing
+  has run the suites on RP2350, because `rp2040py` emulates RP2040 only. The
+  README names `MPS3_AN547` — QEMU's Cortex-M55 board, already a cibuildmp
+  `qemu` target — as the way to test a tail-call build without hardware.
+
+  Two traps documented alongside, both hit while measuring: `-DCMAKE_C_FLAGS=`
+  pre-seeds the cache and voids pico-sdk's own `CMAKE_C_FLAGS_INIT` (the build
+  then dies inside the SDK on spin locks — reproduced with a harmless probe
+  value, so it is the variable and not the contents), and `ports/rp2/Makefile`
+  re-runs `cmake` only when the build directory is absent, so a changed cmake
+  argument silently does nothing on an existing one.
+
 ### Removed
 
 - **`mipsel` support (usermod, `unix-mipsel`).** Debian 13 "Trixie" dropped the

@@ -34,6 +34,16 @@
 # usermod: unix x64/x86/aarch64 (manylinux, glibc), unix armhf
 # (usermod-cross), windows all three arches, webassembly, esp32
 # ESP32_GENERIC, rp2 RPI_PICO -- every port/arch usermod.yml already builds.
+#
+# `rp2 RPI_PICO2` (RP2350, Cortex-M33) is added **alongside** RPI_PICO, not
+# instead of it, and the asymmetry is deliberate: RPI_PICO is the only rp2
+# target anything can execute (rp2040py emulates RP2040 only -- every
+# subcommand takes `--board {pico,pico_w}`), so dropping it would trade this
+# project's one runnable rp2 row for a build-check. RPI_PICO2 is build-only
+# until there is hardware or an RP2350 emulator, and README's "Measured on
+# RP2350" section says so in as many words. What it does buy today is a real
+# ARMv8-M compile of this module -- a different SDK platform layer and a
+# different core from RPI_PICO, so it catches breakage RPI_PICO cannot.
 # mipsel dropped: Debian 13 "Trixie" removed the mipsel port outright, so
 # cibuildmp's own manylinux_2_39_mipsel image has no upstream cross-toolchain
 # left to rebuild from (cibuildmp record 0068) -- a dead platform.
@@ -49,7 +59,7 @@ v1.28.0-manylinux_2_31_armv7l
 v1.28.0-win32 v1.28.0-win_amd64 v1.28.0-win_arm64
 v1.28.0-wasm32
 v1.28.0-esp32-ESP32_GENERIC
-v1.28.0-rp2-RPI_PICO
+v1.28.0-rp2-RPI_PICO v1.28.0-rp2-RPI_PICO2
 """
 
 module-dir = "natmod"

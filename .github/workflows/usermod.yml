@@ -97,6 +97,20 @@ jobs:
             arch_label: RPI_PICO
             identifier: v1.28.0-rp2-RPI_PICO
             runs_on: ubuntu-latest
+          # RP2350 (Cortex-M33), build-only -- and the one build-only row in
+          # this matrix, which is why it carries the flag rather than the
+          # emulator step carrying a board name. rp2040py emulates RP2040 and
+          # nothing else (`--board {pico,pico_w}` on every subcommand; it even
+          # pins Kaluma 1.2.1 because 1.3.0+ ships only `pico2` images it
+          # cannot run), and no GitHub runner has an RP2350. What this row
+          # buys is a real ARMv8-M compile of the module -- a different core
+          # and a different pico-sdk platform layer from RPI_PICO, so it
+          # catches breakage that row cannot. See README, "Measured on RP2350".
+          - port: rp2
+            arch_label: RPI_PICO2
+            identifier: v1.28.0-rp2-RPI_PICO2
+            runs_on: ubuntu-latest
+            build_only: true
 
     steps:
       - uses: actions/checkout@v7
@@ -104,7 +118,10 @@ jobs:
           submodules: recursive
 
       - name: Install the rp2040py emulator
-        if: matrix.port == 'rp2'
+        # Same `!matrix.build_only` gate as the test step below: the RPI_PICO2
+        # row has nothing to run, so installing the emulator for it is pure
+        # runner time.
+        if: matrix.port == 'rp2' && !matrix.build_only
         # The arm-none-eabi + CMake toolchain itself is cibuildmp's own
         # concern now (its build_rp2() driver builds inside a pinned Docker
         # image) -- only the emulator, which cibuildmp has no reason to know
@@ -122,7 +139,7 @@ jobs:
         # that exact value, leaks FROZEN_MANIFEST into the port's internal
         # mpy-cross sub-build via MAKEFLAGS), so the Run tests steps below
         # key on whichever this port's driver actually uses.
-        uses: ballistics-lab/cibuildmp@v0.5.0
+        uses: ballistics-lab/cibuildmp@v0.6.0
         with:
           build: ${{ matrix.identifier }}
 
@@ -136,7 +153,11 @@ jobs:
           "$BIN" test_wiring_apps.py --slow
 
       - name: Run tests (rp2, on the emulator)
-        if: matrix.port == 'rp2'
+        # `!matrix.build_only`, not a board comparison: the RPI_PICO2 row is
+        # build-only because nothing can execute an RP2350 image here, and
+        # saying that once on the row beats every consumer of it re-deriving
+        # it from a board name.
+        if: matrix.port == 'rp2' && !matrix.build_only
         # --no-mpy: the module is in the firmware, so the littlefs image
         # carries only the .wasm blobs. Core suite only, for the same reason
         # the natmod armv6m leg runs only that -- see README under Status.
@@ -199,7 +220,7 @@ jobs:
         # comment: confirmed live (usermod run #58) that manylinux_2_31_armv7l's
         # own libc6-dev/libffi-dev already ship what a plain -static link
         # needs, no vendored libffi build required.
-        uses: ballistics-lab/cibuildmp@v0.5.0
+        uses: ballistics-lab/cibuildmp@v0.6.0
         with:
           build: v1.28.0-manylinux_2_31_armv7l
 
@@ -254,7 +275,7 @@ jobs:
           submodules: recursive
 
       - name: Build usermod (${{ matrix.identifier }})
-        uses: ballistics-lab/cibuildmp@v0.5.0
+        uses: ballistics-lab/cibuildmp@v0.6.0
         with:
           build: ${{ matrix.identifier }}
 
@@ -362,7 +383,7 @@ jobs:
           cat usermod/wasm_manifest.py
 
       - name: Build usermod (v1.28.0-wasm32)
-        uses: ballistics-lab/cibuildmp@v0.5.0
+        uses: ballistics-lab/cibuildmp@v0.6.0
         with:
           build: v1.28.0-wasm32
 
@@ -427,7 +448,7 @@ jobs:
         # clones ESP-IDF on the host and runs the actual build inside its own
         # Docker image -- no separate ESP-IDF-install step needed any more.
         # Same identifier a7p's own mp-usermod.yml already builds this way.
-        uses: ballistics-lab/cibuildmp@v0.5.0
+        uses: ballistics-lab/cibuildmp@v0.6.0
         with:
           build: v1.28.0-esp32-ESP32_GENERIC
 
