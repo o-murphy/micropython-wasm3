@@ -75,9 +75,10 @@ better answer anyway.
 ## Status
 
 Everything below was built and run on Linux x86-64 against **MicroPython
-v1.28.0** — the version CI pins, and the latest release tag. Both build modes
-were also checked against current `master` (v1.29.0-preview) with identical
-results.
+v1.28.0**, and both build modes were also checked against current `master`
+(`v1.29.0-preview`) with identical results, before that tag shipped. CI now
+pins the released **v1.29.0** — the results below are not yet re-confirmed
+against that exact tag; this branch's own CI run is the real check.
 
 The two halves are built and run independently, so a ✅ below is always a
 suite that actually executed on that target — never an inference from the
@@ -502,7 +503,56 @@ Known limitations:
 
 ---
 
+## Build with cibuildmp (recommended)
+
+[`cibuildmp`](https://github.com/ballistics-lab/cibuildmp) — `cibuildwheel`,
+for MicroPython — is what actually builds every target in [Status](#status)
+and in CI (`.github/workflows/natmod.yml`, `.github/workflows/usermod.yml`);
+`cibuildmp.toml` at the repository root is this project's own config. It
+resolves each target's cross-toolchain itself (Docker, pinned images — no
+hand-installed `gcc-arm-none-eabi`/`xtensa-esp32-elf`/ESP-IDF/pico-sdk on
+your machine) and drives the same `natmod/Makefile` / `usermod/` build the
+manual recipes below do, so it is the recommended way to build this module,
+on CI and locally alike. The manual `make`/`cmake` invocations further down
+still work — for a machine without Docker, or for working on the build
+system itself — but they no longer track CI, and can drift from what
+actually ships.
+
+```sh
+uv tool install cibuildmp        # or: pip install cibuildmp
+git submodule update --init --recursive
+
+cibuildmp --build "<identifier>"
+#  →  mpyhouse/<identifier>/
+```
+
+A non-native target also needs an emulator registered once per machine:
+`docker run --privileged --rm tonistiigi/binfmt --install all`.
+
+`<identifier>` is any of the ones `cibuildmp.toml`'s `build =` glob matches
+— every one this repository's CI already builds and tests (or, for the
+`RPI_PICO2`/`RPI_PICO2_W`/ESP32 rows, build-only — see
+[Status](#status)):
+
+| kind                  | identifier(s)                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------- |
+| natmod (`.mpy`)       | `mpy6.3-v1.29.0-{x86,x64,armv6m,armv7m,armv7emsp,armv7emdp,xtensa,xtensawin,rv32imc,rv64imc}`            |
+| usermod, unix          | `v1.29.0-manylinux_2_28_{x86_64,i686,aarch64}`, `v1.29.0-manylinux_2_31_armv7l`                          |
+| usermod, windows       | `v1.29.0-{win32,win_amd64,win_arm64}`                                                                    |
+| usermod, webassembly   | `v1.29.0-wasm32`                                                                                         |
+| usermod, esp32         | `v1.29.0-esp32-ESP32_GENERIC`                                                                            |
+| usermod, rp2           | `v1.29.0-rp2-{RPI_PICO,RPI_PICO2,RPI_PICO2_W}`                                                           |
+
+A glob also works, e.g. `cibuildmp --build "mpy6.3-v1.29.0-*"` for every
+natmod arch in one run. See cibuildmp's own
+[Identifiers and selectors](https://github.com/ballistics-lab/cibuildmp#identifiers-and-selectors)
+for the full syntax.
+
+---
+
 ## Prerequisites
+
+The manual, no-`cibuildmp` path — see above for the recommended one.
 
 ```sh
 pip install -U pyelftools ar          # mpy_ld needs these
@@ -514,7 +564,7 @@ Plus a MicroPython checkout, and a matching `mpy-cross`:
 ```sh
 # Match the version CI pins -- a natmod is only loadable by an interpreter
 # with the same .mpy ABI.
-git clone --depth 1 --branch v1.28.0 https://github.com/micropython/micropython
+git clone --depth 1 --branch v1.29.0 https://github.com/micropython/micropython
 make -C micropython/mpy-cross
 export MPY_DIR=$PWD/micropython
 ```
