@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **MicroPython pin bumped `v1.28.0` → `v1.29.0`**, in `cibuildmp.toml`'s
+  `build =` glob, `usermod.yml`/`natmod.yml`'s `MPY_TAG` default and every
+  identifier that names the tag literally. Same natmod ABI (`mpy6.3`) and the
+  same usermod identifiers cibuildmp already tracks for both tags (unix
+  manylinux arches, windows, wasm32, esp32 `ESP32_GENERIC`, rp2 boards) — no
+  identifier this project builds is new or missing at `v1.29.0`.
+
+  One real incompatibility, not just a version string: **`MICROPY_FORCE_32BIT`
+  is a no-op as of `v1.29.0`** (`ports/unix/Makefile`'s own new warning,
+  `py/py.mk`'s `CC += -m32` line for it removed). `natmod.yml`'s `test` job
+  built its 32-bit x86 test host that way; it now uses
+  `CROSS_COMPILE=i686-linux-gnu-` and `gcc-i686-linux-gnu`/
+  `g++-i686-linux-gnu` instead of `gcc-multilib`, matching upstream's own
+  `tools/ci.sh` (`CI_UNIX_OPTS_X86`/`ci_unix_32bit_setup`), which switched the
+  same way. `py/dynruntime.mk`'s own `ARCH=x86` natmod build made the identical
+  move (`CROSS =` empty at `v1.28.0` → `i686-linux-gnu-` at `v1.29.0`), already
+  handled by cibuildmp itself (its `natmod_host` image carries both
+  toolchains) — nothing to change on this side of that one.
+
+  README's Status intro and the `cibuildmp` build-identifier table move to
+  `v1.29.0` with it; the RP2350 size table, the "`reading the v1.28.0 tree`"
+  C-heap note and other dated measurements stay on `v1.28.0` deliberately —
+  historical record of what was actually run, not a claim about today's pin.
+  **Not yet exercised by CI**: this is a version bump plus one build-system
+  fix inferred from MicroPython's own changelog/`tools/ci.sh`, not from a real
+  build here (no Docker in this environment) — this branch's own CI run is
+  the first real check.
+
 - **cibuildmp bumped `v0.6.1` → `v0.7.1`**, all six `ballistics-lab/cibuildmp@`
   uses in `usermod.yml`/`natmod.yml`. Nothing here needed a config change:
   `0.6.2`'s fixes are cross-arch (`riscv64`/`s390x`/`mipsel` unix builds, none
