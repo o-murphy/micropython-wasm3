@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **cibuildmp bumped `v0.6.1` → `v0.7.1`**, all six `ballistics-lab/cibuildmp@`
+  uses in `usermod.yml`/`natmod.yml`. Nothing here needed a config change:
+  `0.6.2`'s fixes are cross-arch (`riscv64`/`s390x`/`mipsel` unix builds, none
+  of which this project's matrix touches) and `0.7.0`'s are either the same
+  (pre-`v1.20.0` tags, `mimxrt`) or a real fix for a bug this project's own
+  `usermod-armhf` job was exposed to without ever tripping it: `Container`'s
+  `linux32` wrap could disagree between its create-time probe and the
+  `docker exec` every real build command uses, on an arm64 CI runner — exactly
+  what `ubuntu-24.04-arm` is — risking a silently wrong-arch `libffi` link.
+  `0.7.1` adds `no-user-c-modules` (a stock-upstream build path this project
+  has no use for, since every port here always links `usermod/`) and drops
+  the already-unused `CIBMP_SCRATCH_PATH`.
+- **README documents `cibuildmp` as the recommended way to build this
+  module**, not just the tool CI happens to use. It resolves every target's
+  cross-toolchain itself and drives the same `natmod/Makefile`/`usermod/`
+  build the manual `make`/`cmake` recipes do — recipes that no longer track
+  CI and can drift from what actually ships. New "Build with cibuildmp"
+  section, ahead of `Prerequisites`, gives the install/build command and the
+  full table of identifiers `cibuildmp.toml`'s `build =` glob matches (every
+  target `usermod.yml`/`natmod.yml` build and test today).
+
 - **README's RP2040 tail-call verdict, corrected and measured.** The
   "what was tried" table said `M3_HAS_TAIL_CALL=1` has "no effect: `musttail`
   needs GCC 15, arm-none-eabi is 13". Both halves are stale: the toolchain
