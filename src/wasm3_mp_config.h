@@ -57,9 +57,24 @@
  * (below) the native stack grows on every wasm call, so this is the guard
  * that turns a runaway wasm recursion into a trap instead of a hard crash.
  * Keep it comfortably under the port's actual stack size.
+ *
+ * 8 KiB is a device number, and on a desktop OS it is only a false trap
+ * waiting for a bigger module: measured on the i686 unix host, CoreMark
+ * needs between 6 and 7 KiB of it under the current wasm3 pin, and the
+ * mingw i686 windows build crossed 8 KiB outright ("[trap] stack overflow"
+ * in test_wiring_apps.py --slow). A process on Linux, macOS or Windows runs
+ * on a thread stack of 1 MiB or more, so those get a budget sized for that
+ * instead -- still far under it, since the budget counts from wherever the
+ * call into wasm3 happens, not from the top of the stack. The webassembly
+ * port defines none of these (Emscripten's stack is 64 KiB by default) and
+ * keeps the device number.
  */
 #ifndef d_m3MaxNativeStack
+#if defined(__linux__) || defined(__APPLE__) || defined(_WIN32)
+#define d_m3MaxNativeStack              (256 * 1024)
+#else
 #define d_m3MaxNativeStack              (8 * 1024)
+#endif
 #endif
 
 /* ── Error reporting ──────────────────────────────────────────────────────
@@ -103,16 +118,37 @@
 #define M3_HAS_TAIL_CALL                0
 #endif
 
-/* ── Features ─────────────────────────────────────────────────────────────
- * d_m3CascadedOpcodes costs ~3 KiB of operations table (m3_config.h:48) for
- * a speed win. Off by default here; flip it on for usermod builds where the
- * table lives in flash rather than being relocated into RAM.
+/* ── Host layer ───────────────────────────────────────────────────────────
+ * wasm3 picks an m3_host_*.h implementation from the OS it is compiled on
+ * (m3_config_platforms.h): anything that defines __linux__ gets
+ * m3_host_posix.h -- mmap/mprotect guard pages around each linear memory, a
+ * SIGSEGV handler, and pthread_getattr_np for the stack bounds. A natmod
+ * built with the host gcc (x64, x86) sees __linux__ and would pull all of
+ * that in with no libc to link it against. A usermod build could link it,
+ * but should not want it either: linear memory would be mmap'd outside the
+ * MicroPython GC heap, and wasm3 would own the process's SIGSEGV handler.
+ *
+ * m3_host_none.h answers "cannot say" to every question, which also leaves
+ * d_m3GuardedMemory off, so bounds checks stay explicit in the interpreter.
  */
-#ifndef d_m3CascadedOpcodes
-#define d_m3CascadedOpcodes             0
+#ifndef d_m3HasPosixHost
+#define d_m3HasPosixHost                0
+#endif
+#ifndef d_m3HasWin32Host
+#define d_m3HasWin32Host                0
 #endif
 
-/* Validation is a pre-pass over the bytecode. Keep it: this module is meant
+/* M3_THREAD_LOCAL is __thread on any GCC, and its one user outside the
+ * POSIX host is m3_NativeStackLimit caching m3_HostStackBase() -- which
+ * m3_host_none.h answers with NULL, so there is nothing to cache. A natmod
+ * cannot have it anyway: TLS under PIC is a call to __tls_get_addr. */
+#ifndef M3_THREAD_LOCAL
+#define M3_THREAD_LOCAL
+#define M3_HAS_THREAD_LOCAL             0
+#endif
+
+/* ── Features ─────────────────────────────────────────────────────────────
+ * Validation is a pre-pass over the bytecode. Keep it: this module is meant
  * to load .wasm blobs that did not come from the firmware image, and the
  * validator is what stands between a malformed blob and the interpreter. */
 #ifndef d_m3EnableValidation

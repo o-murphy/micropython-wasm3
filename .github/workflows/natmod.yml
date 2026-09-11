@@ -36,7 +36,7 @@ concurrency:
 env:
   # A natmod is only loadable by an interpreter with a matching .mpy ABI, and
   # mpy_ld/dynruntime.mk move between releases — so the version is pinned, not
-  # floating. v1.29.0 is the latest release tag, same ABI (mpy6.3) as v1.28.0.
+  # floating. v1.29.0 is the latest release tag, same ABI (mpy6.3) as v1.29.0.
   MPY_TAG: ${{ inputs.mpy_tag || github.event.inputs.mpy_tag || 'v1.29.0' }}
 
 jobs:
@@ -57,7 +57,19 @@ jobs:
         # Toolchain dispatch per ARCH (apt package / xtensa-lx106 tarball /
         # esp-idf) now lives inside cibuildmp itself (see this repo's own
         # cibuildmp.toml) -- host first, then a pinned download.
-        arch: [x64, x86, armv6m, armv7m, armv7emsp, armv7emdp, rv32imc, rv64imc, xtensa, xtensawin]
+        arch:
+          [
+            x64,
+            x86,
+            armv6m,
+            armv7m,
+            armv7emsp,
+            armv7emdp,
+            rv32imc,
+            rv64imc,
+            xtensa,
+            xtensawin,
+          ]
 
     steps:
       - uses: actions/checkout@v7
@@ -74,7 +86,7 @@ jobs:
       - if: matrix.arch == 'x86'
         run: sudo apt-get update -q && sudo apt-get install -y gcc-multilib
 
-      - uses: ballistics-lab/cibuildmp@v0.7.1
+      - uses: ballistics-lab/cibuildmp@v0.7.3
         with:
           # `build`, not the retired CIBMP_MICROPYTHON/CIBMP_ARCHS env pair
           # (record 0052 dropped both -- there is no more separate
@@ -92,11 +104,9 @@ jobs:
           path: natmod/build/${{ matrix.arch }}/
           if-no-files-found: error
 
-  # ── Run the suite on the arches this runner can actually execute ──────────
-  # x64 and x86 only. Adding an on-target leg (armv7m under QEMU, armv6m under
-  # an RP2040 emulator) is the natural next step and is what micropython-bclibc
-  # does; it needs a serial/raw-REPL bridge that does not exist in this repo
-  # yet, so it is left out rather than committed untested.
+  # ── Run the suite on the arches this runner can execute natively ─────────
+  # x64 and x86 on a unix host. The ARM legs follow: armv7emsp/armv7emdp on
+  # real AArch32 silicon, armv7m under QEMU, armv6m under rp2040py.
   test:
     name: test (${{ matrix.label }})
     needs: build
@@ -107,75 +117,34 @@ jobs:
       matrix:
         include:
           - arch: x64
-            kind: unix
+            manylinux: manylinux_2_28_x86_64
             label: x64 / micropython
           - arch: x86
-            kind: unix32
+            manylinux: manylinux_2_28_i686
             label: x86 / micropython 32-bit
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      - name: Fetch MicroPython ${{ env.MPY_TAG }}
-        # A plain tarball fetch, not cibuildmp's own `fetch-micropython`
-        # composite action. That whole `.github/actions/*` layer never
-        # invokes the cibuildmp CLI at all -- it is a permanent legacy
-        # fallback, not a second supported way to use the project
-        # (cibuildmp record 0073) -- and what this one did is the five
-        # lines below, verbatim.
-        #
-        # No cibuildmp step runs in this job at all (it consumes the build
-        # job's artifact), so there is no cibuildmp-resolved checkout under
-        # $CIBMP_CACHE_PATH to point at the way usermod.yml's own jobs do.
-        #
-        # Still the release tarball rather than a git clone, for the reason
-        # the "No `make submodules` step" comment below already gives: it
-        # carries every port's vendored lib/ sources already.
+      - name: Build stock micropython unix/standard (${{ env.MPY_TAG }}-${{ matrix.manylinux }})
+        # Matches the natmod .mpy ABI by building from the same MPY_TAG. Stock,
+        # for the same reason and by the same env-var route as test-armv6m's
+        # firmware step below -- see that step's comment. cibuildmp builds
+        # inside its own pinned manylinux image rather than on whatever the
+        # runner's apt serves that day, and it is the same identifier
+        # usermod.yml already builds and runs on ubuntu-latest, i686 included.
+        uses: ballistics-lab/cibuildmp@v0.7.3
+        env:
+          CIBMP_NO_USER_C_MODULES: "1"
+        with:
+          package-dir: natmod/ci
+          build: ${{ env.MPY_TAG }}-${{ matrix.manylinux }}
+
+      - name: Locate the built host
         run: |
-          VER="${MPY_TAG#v}"
-          wget -q "https://github.com/micropython/micropython/releases/download/$MPY_TAG/micropython-$VER.tar.xz" \
-            -O mpy.tar.xz
-          tar xf mpy.tar.xz && rm mpy.tar.xz
-          echo "MPY_DIR=$GITHUB_WORKSPACE/micropython-$VER" >> "$GITHUB_ENV"
-
-      - name: Install unix build deps
-        if: matrix.kind == 'unix'
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y libffi-dev pkg-config
-
-      - name: Install 32-bit build deps
-        if: matrix.kind == 'unix32'
-        # gcc-i686-linux-gnu, not gcc-multilib: MICROPY_FORCE_32BIT is a
-        # no-op as of MicroPython v1.29.0 -- ports/unix/Makefile itself now
-        # warns "the MICROPY_FORCE_32BIT flag is no longer affecting
-        # builds, please update your environment", and py/py.mk's own
-        # `CC += -m32` line it drove is gone. Upstream's own tools/ci.sh
-        # switched its 32-bit x86 unix leg the same way (CI_UNIX_OPTS_X86:
-        # CROSS_COMPILE=i686-linux-gnu-, ci_unix_32bit_setup installing
-        # this exact package list) -- mirrored here rather than reinvented.
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update -q
-          sudo apt-get install -y gcc-i686-linux-gnu g++-i686-linux-gnu libffi-dev:i386 pkg-config
-
-      # No `make submodules` step. MPY_DIR is the official release tarball,
-      # which already ships lib/mbedtls,
-      # lib/berkeley-db-1.xx and lib/micropython-lib vendored in; it has no
-      # .git, so `git submodule` against it just fails with "did not match
-      # any file(s) known to git". ports/unix/README.md says the same thing:
-      # the step "can be skipped if you didn't clone the MicroPython source
-      # from git".
-      - name: Build micropython unix/standard (matches the natmod .mpy version)
-        if: matrix.kind == 'unix'
-        run: make -C "$MPY_DIR/ports/unix" VARIANT=standard
-
-      - name: Build micropython unix/standard 32-bit
-        if: matrix.kind == 'unix32'
-        # CROSS_COMPILE=i686-linux-gnu-, not MICROPY_FORCE_32BIT=1 -- see
-        # "Install 32-bit build deps" above for why.
-        run: make -C "$MPY_DIR/ports/unix" VARIANT=standard CROSS_COMPILE=i686-linux-gnu-
+          ID="$MPY_TAG-${{ matrix.manylinux }}"
+          echo "MPY_HOST=$GITHUB_WORKSPACE/natmod/ci/mpyhouse/$ID/micropython-$ID" >> "$GITHUB_ENV"
 
       - uses: actions/download-artifact@v8
         with:
@@ -190,14 +159,14 @@ jobs:
       - name: Run tests
         run: |
           ln -sf ../natmod/build/${{ matrix.arch }}/wasm3.mpy tests/wasm3.mpy
-          cd tests && "$MPY_DIR/ports/unix/build-standard/micropython" test_wasm3.py
+          cd tests && "$MPY_HOST" test_wasm3.py
 
       - name: Run tests against the wasm2mpy demo blobs
         # Real toolchain output — seven languages plus CoreMark — from the
         # wasm2mpy submodule, rather than the hand-assembled fixtures.
         # --slow adds CoreMark (~20s), which is the only blob here that
         # exercises the interpreter under sustained load.
-        run: cd tests && "$MPY_DIR/ports/unix/build-standard/micropython" test_wiring_apps.py --slow
+        run: cd tests && "$MPY_HOST" test_wiring_apps.py --slow
 
   # ── On real ARM silicon: armv7emsp / armv7emdp on a 32-bit ARM Linux host ─
   # Every other ARM leg here is an emulator -- armv7m under qemu-system-arm
@@ -260,8 +229,9 @@ jobs:
           submodules: recursive
 
       - name: Fetch MicroPython ${{ env.MPY_TAG }}
-        # Same plain tarball fetch as the `test` job above, for the same
-        # reasons -- see that step's own comment.
+        # The plain release tarball: it already ships every port's vendored
+        # lib/ sources, so no `make submodules`, and it has no .git for one
+        # to run against anyway.
         run: |
           VER="${MPY_TAG#v}"
           wget -q "https://github.com/micropython/micropython/releases/download/$MPY_TAG/micropython-$VER.tar.xz" \
@@ -350,7 +320,7 @@ jobs:
           submodules: recursive
 
       - name: Fetch MicroPython ${{ env.MPY_TAG }}
-        # Same plain tarball fetch as the `test` job above, for the same
+        # Same plain tarball fetch as test-arm-linux above, for the same
         # reasons -- see that step's own comment.
         run: |
           VER="${MPY_TAG#v}"
@@ -406,38 +376,35 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Fetch MicroPython ${{ env.MPY_TAG }}
-        # Same plain tarball fetch as the `test` job above, for the same
-        # reasons -- see that step's own comment.
-        run: |
-          VER="${MPY_TAG#v}"
-          wget -q "https://github.com/micropython/micropython/releases/download/$MPY_TAG/micropython-$VER.tar.xz" \
-            -O mpy.tar.xz
-          tar xf mpy.tar.xz && rm mpy.tar.xz
-          echo "MPY_DIR=$GITHUB_WORKSPACE/micropython-$VER" >> "$GITHUB_ENV"
-
-      - name: Install the ARM toolchain and emulator
-        # libstdc++-arm-none-eabi-newlib is not optional here even though
-        # nothing in this repo is C++: pico-sdk compiles one .cpp of its own
-        # (pico_cxx_options/new_delete.cpp), which fails with "fatal error:
-        # cstdlib: No such file or directory" on a runner that has only
-        # gcc-arm-none-eabi.
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y --no-install-recommends \
-            gcc-arm-none-eabi libnewlib-arm-none-eabi \
-            libstdc++-arm-none-eabi-newlib cmake
-          pip install "rp2040py==0.3.1" littlefs-python
-
-      - name: Build mpy-cross
-        run: make -C "$MPY_DIR/mpy-cross"
-
-      - name: Build RPI_PICO firmware
+      - name: Build stock RPI_PICO firmware (${{ env.MPY_TAG }})
         # Built from the pinned MicroPython rather than letting rp2040py fetch
         # its own default image: that one is a different release, and a natmod
-        # only loads on a matching .mpy ABI. pico-sdk ships inside the release
-        # tarball, so there is nothing to init.
-        run: make -C "$MPY_DIR/ports/rp2" BOARD=RPI_PICO -j"$(nproc)"
+        # only loads on a matching .mpy ABI. Stock (record 0056): no usermod,
+        # no frozen wasm3.py, so the emulator exercises wasm3.mpy from
+        # littlefs rather than a built-in copy. cibuildmp's rp2 driver carries
+        # the arm-none-eabi + CMake toolchain in its own pinned Docker image.
+        #
+        # package-dir is natmod/ci, not ".", on purpose: the top-level
+        # cibuildmp.toml sets user-c-modules, and cibuildmp rejects that
+        # together with no-user-c-modules outright (mutually exclusive, not a
+        # precedence rule). natmod/ci has no config of its own, so the env
+        # var is the only thing selecting the stock path, and `build` names
+        # the one target. Output lands under natmod/ci/mpyhouse.
+        uses: ballistics-lab/cibuildmp@v0.7.3
+        env:
+          CIBMP_NO_USER_C_MODULES: "1"
+        with:
+          package-dir: natmod/ci
+          build: ${{ env.MPY_TAG }}-rp2-RPI_PICO
+
+      - name: Install the rp2040py emulator
+        uses: o-murphy/rp2040py@v0.3.5
+
+      - name: Install littlefs-python
+        # The action puts rp2040py in its own isolated uv tool env, so the
+        # littlefs module run_rp2040py.py imports to build the image still
+        # has to go into the runner's python3.
+        run: pip install littlefs-python
 
       - uses: actions/download-artifact@v8
         with:
@@ -447,5 +414,5 @@ jobs:
       - name: Run the core suite on the emulator
         run: |
           python3 natmod/ci/run_rp2040py.py \
-            "$MPY_DIR/ports/rp2/build-RPI_PICO/firmware.uf2" \
+            "natmod/ci/mpyhouse/$MPY_TAG-rp2-RPI_PICO/firmware-$MPY_TAG-rp2-RPI_PICO.uf2" \
             natmod/build/armv6m

@@ -135,7 +135,14 @@ jobs:
         # concern now (its build_rp2() driver builds inside a pinned Docker
         # image) -- only the emulator, which cibuildmp has no reason to know
         # about, stays here.
-        run: pip install "rp2040py==0.3.1" littlefs-python
+        uses: o-murphy/rp2040py@v0.3.5
+
+      - name: Install littlefs-python
+        if: matrix.port == 'rp2' && !matrix.build_only
+        # The action puts rp2040py in its own isolated uv tool env, so the
+        # littlefs module run_rp2040py.py imports to build the image still
+        # has to go into the runner's python3.
+        run: pip install littlefs-python
 
       - name: Build usermod (${{ matrix.identifier }})
         # MICROPY_C_HEAP_SIZE is usermod/micropython.cmake's own default --
@@ -148,7 +155,7 @@ jobs:
         # that exact value, leaks FROZEN_MANIFEST into the port's internal
         # mpy-cross sub-build via MAKEFLAGS), so the Run tests steps below
         # key on whichever this port's driver actually uses.
-        uses: ballistics-lab/cibuildmp@v0.7.1
+        uses: ballistics-lab/cibuildmp@v0.7.3
         with:
           build: ${{ matrix.identifier }}
 
@@ -229,7 +236,7 @@ jobs:
         # comment: confirmed live (usermod run #58) that manylinux_2_31_armv7l's
         # own libc6-dev/libffi-dev already ship what a plain -static link
         # needs, no vendored libffi build required.
-        uses: ballistics-lab/cibuildmp@v0.7.1
+        uses: ballistics-lab/cibuildmp@v0.7.3
         with:
           build: v1.29.0-manylinux_2_31_armv7l
 
@@ -284,7 +291,7 @@ jobs:
           submodules: recursive
 
       - name: Build usermod (${{ matrix.identifier }})
-        uses: ballistics-lab/cibuildmp@v0.7.1
+        uses: ballistics-lab/cibuildmp@v0.7.3
         with:
           build: ${{ matrix.identifier }}
 
@@ -392,7 +399,7 @@ jobs:
           cat usermod/wasm_manifest.py
 
       - name: Build usermod (v1.29.0-wasm32)
-        uses: ballistics-lab/cibuildmp@v0.7.1
+        uses: ballistics-lab/cibuildmp@v0.7.3
         with:
           build: v1.29.0-wasm32
 
@@ -457,7 +464,7 @@ jobs:
         # clones ESP-IDF on the host and runs the actual build inside its own
         # Docker image -- no separate ESP-IDF-install step needed any more.
         # Same identifier a7p's own mp-usermod.yml already builds this way.
-        uses: ballistics-lab/cibuildmp@v0.7.1
+        uses: ballistics-lab/cibuildmp@v0.7.3
         with:
           build: v1.29.0-esp32-ESP32_GENERIC
 

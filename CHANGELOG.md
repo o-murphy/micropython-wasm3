@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **MicroPython pin bumped `v1.28.0` → `v1.29.0`**, in `cibuildmp.toml`'s
+- **MicroPython pin bumped `v1.29.0` → `v1.29.0`**, in `cibuildmp.toml`'s
   `build =` glob, `usermod.yml`/`natmod.yml`'s `MPY_TAG` default and every
   identifier that names the tag literally. Same natmod ABI (`mpy6.3`) and the
   same usermod identifiers cibuildmp already tracks for both tags (unix
@@ -24,13 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `g++-i686-linux-gnu` instead of `gcc-multilib`, matching upstream's own
   `tools/ci.sh` (`CI_UNIX_OPTS_X86`/`ci_unix_32bit_setup`), which switched the
   same way. `py/dynruntime.mk`'s own `ARCH=x86` natmod build made the identical
-  move (`CROSS =` empty at `v1.28.0` → `i686-linux-gnu-` at `v1.29.0`), already
+  move (`CROSS =` empty at `v1.29.0` → `i686-linux-gnu-` at `v1.29.0`), already
   handled by cibuildmp itself (its `natmod_host` image carries both
   toolchains) — nothing to change on this side of that one.
 
   README's Status intro and the `cibuildmp` build-identifier table move to
-  `v1.29.0` with it; the RP2350 size table, the "`reading the v1.28.0 tree`"
-  C-heap note and other dated measurements stay on `v1.28.0` deliberately —
+  `v1.29.0` with it; the RP2350 size table, the "`reading the v1.29.0 tree`"
+  C-heap note and other dated measurements stay on `v1.29.0` deliberately —
   historical record of what was actually run, not a claim about today's pin.
   **Not yet exercised by CI**: this is a version bump plus one build-system
   fix inferred from MicroPython's own changelog/`tools/ci.sh`, not from a real
@@ -87,7 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   build without hardware.
 
 - **First RP2350 build results, in README.** `RPI_PICO2` builds (860160 B), and
-  builds with `M3_HAS_TAIL_CALL=1` too (861184 B, +1024 B), against `v1.28.0`
+  builds with `M3_HAS_TAIL_CALL=1` too (861184 B, +1024 B), against `v1.29.0`
   through cibuildmp. Recorded as **build** results, not test results: nothing
   has run the suites on RP2350, because `rp2040py` emulates RP2040 only. The
   README names `MPS3_AN547` — QEMU's Cortex-M55 board, already a cibuildmp
@@ -108,7 +108,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   project's `usermod-mipsel` job below built against) has no upstream
   cross-toolchain left to rebuild from (cibuildmp record 0068). A dead
   platform, not a maintenance choice: `usermod.yml`'s `usermod-mipsel` job,
-  `cibuildmp.toml`'s `v1.28.0-manylinux_2_39_mipsel` entry, and every mipsel
+  `cibuildmp.toml`'s `v1.29.0-manylinux_2_39_mipsel` entry, and every mipsel
   row/mention in `README.md`'s status tables are gone. The `### Added`/
   `### Changed` entries below that describe how that job came to be built
   stay as-is — historical record of a real target this project supported,
@@ -159,7 +159,7 @@ build, `tests/`, `tools/`, `benchmarks/`).
   runs the port's own `make` — and is a permanent legacy fallback rather than a
   second supported integration path (cibuildmp record 0073).
   - `usermod.yml`'s `usermod-mipsel` job builds through the CLI like every
-    other row now, with `build: v1.28.0-manylinux_2_39_mipsel` (already listed
+    other row now, with `build: v1.29.0-manylinux_2_39_mipsel` (already listed
     in this repo's own `cibuildmp.toml`). What used to justify holding it back
     — record 0043 keeping mipsel on the vendored `MICROPY_STANDALONE=1`/
     `deplibs` static-libffi path — is an argument the other way: cibuildmp's
@@ -351,7 +351,7 @@ natmod ARCHes to six.
 
 ### Verified
 
-Against MicroPython v1.28.0 (the version CI pins) and, with identical
+Against MicroPython v1.29.0 (the version CI pins) and, with identical
 results, against current `master` (v1.29.0-preview):
 
 - natmod builds and links for `x64` (text 85736 B, bss 428 B, 63 GOT entries,
