@@ -22,18 +22,21 @@
  * Only compiled for natmod builds; a usermod links the port's own libc.
  */
 
-#if !defined(__riscv)
 /* Define errno before any include so it lands in .bss, not .data — mpy_ld
- * rejects a non-empty .data section in a linked native module. */
-int errno;
-#endif
+ * rejects a non-empty .data section in a linked native module. The section
+ * is named outright because on RISC-V GCC would otherwise put a 4-byte
+ * global in .sbss, and mpy_ld takes only sections whose name starts with
+ * ".bss". */
+int errno __attribute__((section(".bss.errno")));
 
 #include "py/dynruntime.h"
 
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <ctype.h>
 
 /* ── Allocation ───────────────────────────────────────────────────────────
  * wasm3 allocates its code pages, runtime stack and wasm linear memory
@@ -107,7 +110,13 @@ int strcmp(const char *l, const char *r) {
  * into a Python exception keeps the REPL alive instead of resetting the
  * board; the trailing loop is unreachable but satisfies noreturn.
  */
-#if !defined(__riscv)
+/* Both libcs' <errno.h> define errno as a call to one of these very
+ * functions -- (*__errno()) in newlib, (*__errno_location()) in glibc -- so
+ * `&errno` in here would expand to a call to itself: an infinite loop, which
+ * is what GCC compiled it to until wasm3's m3_CallArgv started writing
+ * errno. Name the variable above, not the macro. */
+#undef errno
+
 int *__errno(void) {
     return &errno;
 }
@@ -115,7 +124,6 @@ int *__errno(void) {
 int *__errno_location(void) {
     return &errno;
 }
-#endif
 
 __attribute__((noreturn))
 void abort(void) {
@@ -124,15 +132,16 @@ void abort(void) {
 }
 
 /* ── Deliberately unimplemented ───────────────────────────────────────────
- * m3_CallArgv() (wasm3/source/m3_env.c:1096) converts string arguments with
- * strtoul/strtoull/strtod. It is a convenience entry point for wasm3's own
- * CLI and WASI hosts; this module never calls it — wasm3.call() marshals
- * typed values through m3_Call() instead. But mpy_ld links whole objects, so
- * m3_env.o still carries the references and the link fails without them.
+ * m3_CallArgv() (wasm3/source/m3_env.c, ParseArgInteger and its float
+ * sibling) converts string arguments with strtoul/strtoull/strtoll/strtod.
+ * It is a convenience entry point for wasm3's own CLI and WASI hosts; this
+ * module never calls it — wasm3.call() marshals typed values through
+ * m3_Call() instead. But mpy_ld links whole objects, so m3_env.o still
+ * carries the references and the link fails without them.
  *
  * Rather than drag a correctly-rounded strtod into every .mpy for a function
  * that cannot be reached, these resolve the link and fail loudly if that
- * assumption is ever wrong. These three symbols appear nowhere else in the
+ * assumption is ever wrong. These four symbols appear nowhere else in the
  * wasm3 sources — verified by grep, and worth re-checking on a submodule
  * bump.
  */
@@ -148,10 +157,57 @@ unsigned long long strtoull(const char *s, char **end, int base) {
     return 0;
 }
 
+long long strtoll(const char *s, char **end, int base) {
+    (void)s; (void)end; (void)base;
+    mp_raise_msg(&mp_type_NotImplementedError, "wasm3: m3_CallArgv unsupported");
+    return 0;
+}
+
 double strtod(const char *s, char **end) {
     (void)s; (void)end;
     mp_raise_msg(&mp_type_NotImplementedError, "wasm3: m3_CallArgv unsupported");
     return 0.0;
+}
+
+/* The same parser's other libc call. A real one rather than a stub: it is
+ * one line, and src/ctype_shadow/ctype.h is what turns every libc's macro
+ * into a call to this. */
+int isspace(int c) {
+    return c == ' ' || (c >= '\t' && c <= '\r');
+}
+
+/* ── No filesystem through libc ───────────────────────────────────────────
+ * wasm3's m3_host_none.h (the host layer wasm3_mp_config.h selects)
+ * implements m3_HostMapFile by reading the file with stdio, and it is
+ * compiled into m3_core.o whether or not anything calls it. Nothing here
+ * does — load() takes the module's bytes from Python — so fopen answers "no
+ * such file", which m3_HostMapFile already handles, and the rest can never
+ * be reached with a FILE* to act on.
+ */
+FILE *fopen(const char *path, const char *mode) {
+    (void)path; (void)mode;
+    return NULL;
+}
+
+int fseek(FILE *f, long off, int whence) {
+    (void)f; (void)off; (void)whence;
+    return -1;
+}
+
+long ftell(FILE *f) {
+    (void)f;
+    return -1;
+}
+
+size_t fread(void *buf, size_t size, size_t n, FILE *f) {
+    (void)buf; (void)size; (void)f;
+    (void)n;
+    return 0;
+}
+
+int fclose(FILE *f) {
+    (void)f;
+    return 0;
 }
 
 __attribute__((noreturn))

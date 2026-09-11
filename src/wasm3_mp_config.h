@@ -103,16 +103,37 @@
 #define M3_HAS_TAIL_CALL                0
 #endif
 
-/* ── Features ─────────────────────────────────────────────────────────────
- * d_m3CascadedOpcodes costs ~3 KiB of operations table (m3_config.h:48) for
- * a speed win. Off by default here; flip it on for usermod builds where the
- * table lives in flash rather than being relocated into RAM.
+/* ── Host layer ───────────────────────────────────────────────────────────
+ * wasm3 picks an m3_host_*.h implementation from the OS it is compiled on
+ * (m3_config_platforms.h): anything that defines __linux__ gets
+ * m3_host_posix.h -- mmap/mprotect guard pages around each linear memory, a
+ * SIGSEGV handler, and pthread_getattr_np for the stack bounds. A natmod
+ * built with the host gcc (x64, x86) sees __linux__ and would pull all of
+ * that in with no libc to link it against. A usermod build could link it,
+ * but should not want it either: linear memory would be mmap'd outside the
+ * MicroPython GC heap, and wasm3 would own the process's SIGSEGV handler.
+ *
+ * m3_host_none.h answers "cannot say" to every question, which also leaves
+ * d_m3GuardedMemory off, so bounds checks stay explicit in the interpreter.
  */
-#ifndef d_m3CascadedOpcodes
-#define d_m3CascadedOpcodes             0
+#ifndef d_m3HasPosixHost
+#define d_m3HasPosixHost                0
+#endif
+#ifndef d_m3HasWin32Host
+#define d_m3HasWin32Host                0
 #endif
 
-/* Validation is a pre-pass over the bytecode. Keep it: this module is meant
+/* M3_THREAD_LOCAL is __thread on any GCC, and its one user outside the
+ * POSIX host is m3_NativeStackLimit caching m3_HostStackBase() -- which
+ * m3_host_none.h answers with NULL, so there is nothing to cache. A natmod
+ * cannot have it anyway: TLS under PIC is a call to __tls_get_addr. */
+#ifndef M3_THREAD_LOCAL
+#define M3_THREAD_LOCAL
+#define M3_HAS_THREAD_LOCAL             0
+#endif
+
+/* ── Features ─────────────────────────────────────────────────────────────
+ * Validation is a pre-pass over the bytecode. Keep it: this module is meant
  * to load .wasm blobs that did not come from the firmware image, and the
  * validator is what stands between a malformed blob and the interpreter. */
 #ifndef d_m3EnableValidation

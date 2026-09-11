@@ -14,9 +14,9 @@ fixed blob into one `.mpy` and runs it at near-native speed).
 
 Two integration modes, same Python API:
 
-| Approach               | Location   | Selected by | Covered in CI                                        | Deployment                           |
-| ---------------------- | ---------- | ----------- | ---------------------------------------------------- | ------------------------------------ |
-| **natmod** (`.mpy`)    | `natmod/`  | `ARCH`      | all 10 `dynruntime.mk` ARCHes                        | Copy `.mpy` to the device filesystem |
+| Approach               | Location   | Selected by | Covered in CI                                       | Deployment                            |
+| ---------------------- | ---------- | ----------- | --------------------------------------------------- | ------------------------------------- |
+| **natmod** (`.mpy`)    | `natmod/`  | `ARCH`      | all 10 `dynruntime.mk` ARCHes                       | Copy `.mpy` to the device filesystem  |
 | **usermod** (baked in) | `usermod/` | port        | `unix`, `windows`, `webassembly`, `rp2` — 9 targets | Built into firmware — no file to copy |
 
 A natmod reaches only the architectures `py/dynruntime.mk` knows about; a
@@ -75,7 +75,7 @@ better answer anyway.
 ## Status
 
 Everything below was built and run on Linux x86-64 against **MicroPython
-v1.28.0**, and both build modes were also checked against current `master`
+v1.29.0**, and both build modes were also checked against current `master`
 (`v1.29.0-preview`) with identical results, before that tag shipped. CI now
 pins the released **v1.29.0** — the results below are not yet re-confirmed
 against that exact tag; this branch's own CI run is the real check.
@@ -91,18 +91,18 @@ selected by *port*, and any port with `USER_C_MODULES` is a candidate.
 
 ### natmod — by `ARCH`
 
-| ARCH               | built | executed                        |
-| ------------------ | :---: | ------------------------------- |
-| x64                | ✅    | 51/51 ✅ on the runner          |
-| x86                | ✅    | 51/51 ✅ on the runner          |
-| armv7m             | ✅    | 49/49 ✅ under QEMU (MPS2_AN385) |
-| armv6m             | ✅    | 20/20 ✅ on rp2040py, blobs ⚠️  |
-| armv7emsp          | ✅    | 51/51 ✅ on real 32-bit ARM Linux |
-| armv7emdp          | ✅    | 51/51 ✅ on real 32-bit ARM Linux |
-| rv32imc            | ✅    | —                               |
-| rv64imc            | ✅    | —                               |
-| xtensa (ESP8266)   | ✅    | —                               |
-| xtensawin (ESP32)  | ✅    | —                               |
+| ARCH              | built | executed                         |
+| ----------------- | :---: | -------------------------------- |
+| x64               |   ✅   | 51/51 ✅ on the runner            |
+| x86               |   ✅   | 51/51 ✅ on the runner            |
+| armv7m            |   ✅   | 49/49 ✅ under QEMU (MPS2_AN385)  |
+| armv6m            |   ✅   | 20/20 ✅ on rp2040py, blobs ⚠️     |
+| armv7emsp         |   ✅   | 51/51 ✅ on real 32-bit ARM Linux |
+| armv7emdp         |   ✅   | 51/51 ✅ on real 32-bit ARM Linux |
+| rv32imc           |   ✅   | —                                |
+| rv64imc           |   ✅   | —                                |
+| xtensa (ESP8266)  |   ✅   | —                                |
+| xtensawin (ESP32) |   ✅   | —                                |
 
 Six of ten are executed; for the other four "it links" is the whole claim.
 
@@ -128,20 +128,20 @@ which is a different claim entirely.
 
 ### usermod — by port
 
-| Port              | targets in CI                     | result             |
-| ----------------- | --------------------------------- | ------------------ |
-| `unix`            | x64, x86                          | 51/51 ✅ each      |
-| `unix`            | aarch64 (native runner)           | 51/51 ✅           |
-| `unix`            | armhf (static, real AArch32)      | 51/51 ✅           |
-| `windows`         | x64, x86 (WOW64), arm64           | 51/51 ✅ each      |
-| `webassembly`     | wasm, under node                  | 51/51 ✅           |
-| `rp2`             | `RPI_PICO`, on rp2040py           | 20/20 ✅           |
-| `rp2`             | `RPI_PICO2`/`RPI_PICO2_W` (RP2350), build-only | builds ✅, see below |
-| `qemu`            | armv7m                            | blocked, see below |
-| `esp32`           | `ESP32_GENERIC`, build-only       | builds ✅, see below |
-| `esp8266`         | —                                 | unsafe, see below  |
-| `stm32`, `samd`, `nrf`, `alif`, `zephyr`, `cc3200` | — | no C heap |
-| `mimxrt`, `renesas-ra` | —                            | plausible, untried |
+| Port                                               | targets in CI                                  | result              |
+| -------------------------------------------------- | ---------------------------------------------- | ------------------- |
+| `unix`                                             | x64, x86                                       | 51/51 ✅ each        |
+| `unix`                                             | aarch64 (native runner)                        | 51/51 ✅             |
+| `unix`                                             | armhf (static, real AArch32)                   | 51/51 ✅             |
+| `windows`                                          | x64, x86 (WOW64), arm64                        | 51/51 ✅ each        |
+| `webassembly`                                      | wasm, under node                               | 51/51 ✅             |
+| `rp2`                                              | `RPI_PICO`, on rp2040py                        | 20/20 ✅             |
+| `rp2`                                              | `RPI_PICO2`/`RPI_PICO2_W` (RP2350), build-only | builds ✅, see below |
+| `qemu`                                             | armv7m                                         | blocked, see below  |
+| `esp32`                                            | `ESP32_GENERIC`, build-only                    | builds ✅, see below |
+| `esp8266`                                          | —                                              | unsafe, see below   |
+| `stm32`, `samd`, `nrf`, `alif`, `zephyr`, `cc3200` | —                                              | no C heap           |
+| `mimxrt`, `renesas-ra`                             | —                                              | plausible, untried  |
 
 Eleven targets across six ports. Nine of them run the suites; `RPI_PICO2` and
 `RPI_PICO2_W` are the two build-only rows, and that is for a reason no work
@@ -162,7 +162,7 @@ it on its own CPU. The move is also why that row switched from upstream's
 `gnueabi` to `gnueabihf`: soft-float armel baselines at ARMv5TE, whose SWP
 atomics ARMv8 removed outright.
 
-The last four rows come from reading the v1.28.0 tree rather than from
+The last four rows come from reading the v1.29.0 tree rather than from
 trying each: wasm3 allocates through the port's `calloc()`, `mimxrt` and
 `renesas-ra` provide `_sbrk`, and the six listed as having no C heap
 provide neither that nor a malloc of their own.
@@ -313,9 +313,9 @@ The core suite passes on RP2040; the blob suite does not. Running each
 failing blob on its own, on a freshly collected heap, separates the two
 causes — and the binding one is not memory:
 
-| blob             | free before | free after load | result                            |
-| ---------------- | ----------- | --------------- | --------------------------------- |
-| `zig`            | 140080      | 64560           | ✅ runs                            |
+| blob             | free before | free after load | result                             |
+| ---------------- | ----------- | --------------- | ---------------------------------- |
+| `zig`            | 140080      | 64560           | ✅ runs                             |
 | `cpp`            | 140416      | 65552           | ⛔ maximum recursion depth exceeded |
 | `assemblyscript` | 137248      | 56624           | ⛔ `[trap] stack overflow`          |
 | `rust`           | 129024      | 40944           | ⛔ `[trap] stack overflow`          |
@@ -341,13 +341,13 @@ is no fix available from inside a `.mpy`, and shipping a patched MicroPython
 would defeat the point of a natmod — a natmod is supposed to drop onto the
 firmware people already have. What was tried:
 
-| attempt                                      | result                          |
-| -------------------------------------------- | ------------------------------- |
-| `-O2` instead of `-Os`                        | 17/20, +17 KB of text            |
-| explicit `-foptimize-sibling-calls`           | 17/20, byte-identical output — already on |
-| `M3_HAS_TAIL_CALL=1`                          | impossible on this core — see below |
-| running the interpreter on a heap stack       | not possible from a `.mpy` (below) |
-| `PICO_STACK_SIZE` past `SCRATCH_Y`            | fails to link, 4 KB bank         |
+| attempt                                 | result                                    |
+| --------------------------------------- | ----------------------------------------- |
+| `-O2` instead of `-Os`                  | 17/20, +17 KB of text                     |
+| explicit `-foptimize-sibling-calls`     | 17/20, byte-identical output — already on |
+| `M3_HAS_TAIL_CALL=1`                    | impossible on this core — see below       |
+| running the interpreter on a heap stack | not possible from a `.mpy` (below)        |
+| `PICO_STACK_SIZE` past `SCRATCH_Y`      | fails to link, 4 KB bank                  |
 
 GCC does not sibling-call wasm3's indirect dispatch under the natmod PIC
 model on Thumb, and no optimisation flag changes that — the identical text
@@ -404,13 +404,13 @@ need the chain flattened, not more memory.
 ### Measured on RP2350
 
 `RPI_PICO2` builds, and with tail calls it builds too; `RPI_PICO2_W` builds
-too — all three through `cibuildmp` on the toolchain above, `v1.28.0`:
+too — all three through `cibuildmp` on the toolchain above, `v1.29.0`:
 
-| build                                     | firmware  | note |
-| ----------------------------------------- | --------- | ---- |
-| `RPI_PICO` (RP2040, Cortex-M0+)           | 887808 B  | the baseline this README describes |
-| `RPI_PICO2` (RP2350, Cortex-M33), stock   | 860160 B  | first build of this module for RP2350 |
-| `RPI_PICO2` + `M3_HAS_TAIL_CALL=1`        | 861184 B  | +1024 B; compiles and links |
+| build                                     | firmware  | note                                                                                                               |
+| ----------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------ |
+| `RPI_PICO` (RP2040, Cortex-M0+)           | 887808 B  | the baseline this README describes                                                                                 |
+| `RPI_PICO2` (RP2350, Cortex-M33), stock   | 860160 B  | first build of this module for RP2350                                                                              |
+| `RPI_PICO2` + `M3_HAS_TAIL_CALL=1`        | 861184 B  | +1024 B; compiles and links                                                                                        |
 | `RPI_PICO2_W` (RP2350, cyw43 wifi), stock | 1861120 B | roughly 2x `RPI_PICO2` -- the wifi/BT stack (cyw43, lwip, mbedtls) this board bakes in by default, not this module |
 
 **These are build results, not test results.** Nothing here has run the suites
@@ -510,7 +510,7 @@ for MicroPython — is what actually builds every target in [Status](#status)
 and in CI (`.github/workflows/natmod.yml`, `.github/workflows/usermod.yml`);
 `cibuildmp.toml` at the repository root is this project's own config. It
 resolves each target's cross-toolchain itself (Docker, pinned images — no
-hand-installed `gcc-arm-none-eabi`/`xtensa-esp32-elf`/ESP-IDF/pico-sdk on
+hand-installed `gcc-arm-none-eabi`/`xtensa-esp32-elf`/`ESP-IDF`/`pico-sdk` on
 your machine) and drives the same `natmod/Makefile` / `usermod/` build the
 manual recipes below do, so it is the recommended way to build this module,
 on CI and locally alike. The manual `make`/`cmake` invocations further down
@@ -534,14 +534,14 @@ A non-native target also needs an emulator registered once per machine:
 `RPI_PICO2`/`RPI_PICO2_W`/ESP32 rows, build-only — see
 [Status](#status)):
 
-| kind                  | identifier(s)                                                                                          |
-| ---------------------- | ------------------------------------------------------------------------------------------------------- |
-| natmod (`.mpy`)       | `mpy6.3-v1.29.0-{x86,x64,armv6m,armv7m,armv7emsp,armv7emdp,xtensa,xtensawin,rv32imc,rv64imc}`            |
-| usermod, unix          | `v1.29.0-manylinux_2_28_{x86_64,i686,aarch64}`, `v1.29.0-manylinux_2_31_armv7l`                          |
-| usermod, windows       | `v1.29.0-{win32,win_amd64,win_arm64}`                                                                    |
-| usermod, webassembly   | `v1.29.0-wasm32`                                                                                         |
-| usermod, esp32         | `v1.29.0-esp32-ESP32_GENERIC`                                                                            |
-| usermod, rp2           | `v1.29.0-rp2-{RPI_PICO,RPI_PICO2,RPI_PICO2_W}`                                                           |
+| kind                 | identifier(s)                                                                                 |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| natmod (`.mpy`)      | `mpy6.3-v1.29.0-{x86,x64,armv6m,armv7m,armv7emsp,armv7emdp,xtensa,xtensawin,rv32imc,rv64imc}` |
+| usermod, unix        | `v1.29.0-manylinux_2_28_{x86_64,i686,aarch64}`, `v1.29.0-manylinux_2_31_armv7l`               |
+| usermod, windows     | `v1.29.0-{win32,win_amd64,win_arm64}`                                                         |
+| usermod, webassembly | `v1.29.0-wasm32`                                                                              |
+| usermod, esp32       | `v1.29.0-esp32-ESP32_GENERIC`                                                                 |
+| usermod, rp2         | `v1.29.0-rp2-{RPI_PICO,RPI_PICO2,RPI_PICO2_W}`                                                |
 
 A glob also works, e.g. `cibuildmp --build "mpy6.3-v1.29.0-*"` for every
 natmod arch in one run. See cibuildmp's own

@@ -84,5 +84,5 @@ tests/*.mpy
 tests/wasm3.py
 
 # usermod.yml's own generated webassembly FROZEN_MANIFEST -- see
-# cibuildmp.toml's [override."v1.28.0-wasm32"] comment
+# cibuildmp.toml's [override."v1.29.0-wasm32"] comment
 usermod/wasm_manifest.py

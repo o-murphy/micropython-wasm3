@@ -36,7 +36,7 @@ concurrency:
 env:
   # A natmod is only loadable by an interpreter with a matching .mpy ABI, and
   # mpy_ld/dynruntime.mk move between releases — so the version is pinned, not
-  # floating. v1.29.0 is the latest release tag, same ABI (mpy6.3) as v1.28.0.
+  # floating. v1.29.0 is the latest release tag, same ABI (mpy6.3) as v1.29.0.
   MPY_TAG: ${{ inputs.mpy_tag || github.event.inputs.mpy_tag || 'v1.29.0' }}
 
 jobs:

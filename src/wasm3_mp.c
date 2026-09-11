@@ -395,18 +395,18 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mp_wasm3_link_obj, 5, 5, mp_wasm3_lin
 
 static mp_obj_t mp_wasm3_memory(mp_obj_t handle_obj) {
     wasm3_slot_t *s = slot_of(handle_obj);
-    uint32_t size = 0;
-    uint8_t *mem = m3_GetMemory(s->runtime, &size, 0);
+    size_t size = 0;
+    uint8_t *mem = m3_GetMemory(s->module, &size, 0);
     if (mem == NULL || size == 0) {
         WASM3_RAISE("module has no linear memory");
     }
-    return mp_obj_new_bytearray_by_ref((size_t)size, mem);
+    return mp_obj_new_bytearray_by_ref(size, mem);
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(mp_wasm3_memory_obj, mp_wasm3_memory);
 
 static mp_obj_t mp_wasm3_mem_size(mp_obj_t handle_obj) {
     wasm3_slot_t *s = slot_of(handle_obj);
-    return mp_obj_new_int((mp_int_t)m3_GetMemorySize(s->runtime));
+    return mp_obj_new_int((mp_int_t)m3_GetMemorySize(s->module, 0));
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(mp_wasm3_mem_size_obj, mp_wasm3_mem_size);
 

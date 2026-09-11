@@ -137,6 +137,7 @@ endif
 CFLAGS_EXTRA += \
     -I$(WASM3_ROOT)/source \
     -I$(SRC_DIR) \
+    -I$(SRC_DIR)/ctype_shadow \
     -Igenerated \
     -include $(SRC_DIR)/wasm3_mp_config.h \
     -DWASM3_BUILD_NATMOD \
