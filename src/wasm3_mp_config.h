@@ -57,9 +57,24 @@
  * (below) the native stack grows on every wasm call, so this is the guard
  * that turns a runaway wasm recursion into a trap instead of a hard crash.
  * Keep it comfortably under the port's actual stack size.
+ *
+ * 8 KiB is a device number, and on a desktop OS it is only a false trap
+ * waiting for a bigger module: measured on the i686 unix host, CoreMark
+ * needs between 6 and 7 KiB of it under the current wasm3 pin, and the
+ * mingw i686 windows build crossed 8 KiB outright ("[trap] stack overflow"
+ * in test_wiring_apps.py --slow). A process on Linux, macOS or Windows runs
+ * on a thread stack of 1 MiB or more, so those get a budget sized for that
+ * instead -- still far under it, since the budget counts from wherever the
+ * call into wasm3 happens, not from the top of the stack. The webassembly
+ * port defines none of these (Emscripten's stack is 64 KiB by default) and
+ * keeps the device number.
  */
 #ifndef d_m3MaxNativeStack
+#if defined(__linux__) || defined(__APPLE__) || defined(_WIN32)
+#define d_m3MaxNativeStack              (256 * 1024)
+#else
 #define d_m3MaxNativeStack              (8 * 1024)
+#endif
 #endif
 
 /* ── Error reporting ──────────────────────────────────────────────────────

@@ -77,9 +77,12 @@ def main():
     args = ap.parse_args()
 
     suites = args.suites or ["test_wasm3.py"]
+    # rp2040py runs with cwd=tests/ below, so a relative path from the caller
+    # would resolve against the wrong directory.
+    firmware = os.path.abspath(args.firmware)
 
     mpy = None if args.no_mpy else os.path.join(args.build_dir, "wasm3.mpy")
-    img = build_image(mpy, args.image)
+    img = build_image(mpy, os.path.abspath(args.image))
     print("[rp2040py] littlefs image: %s (%d bytes)" % (img, os.path.getsize(img)),
           flush=True)
 
@@ -91,7 +94,7 @@ def main():
         # is only loadable by a matching .mpy ABI.
         proc = subprocess.run(
             [args.rp2040py, "micropython",
-             "--image", args.firmware, "--littlefs", img, suite],
+             "--image", firmware, "--littlefs", img, suite],
             cwd=os.path.join(_REPO, "tests"),
             capture_output=True, text=True)
         out = proc.stdout + proc.stderr
